@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pyyaml
+sqlite-web
+pillow
+piexif
+aiohttp
+rich
+black
+ruff
