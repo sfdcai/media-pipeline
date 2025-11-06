@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Media Pipeline Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  </head>
+  <body class="bg-slate-900 text-slate-100 min-h-screen">
+    <div class="max-w-6xl mx-auto py-10 px-6 space-y-8">
+      <header>
+        <h1 class="text-3xl font-semibold">Media Pipeline Dashboard</h1>
+        <p class="text-slate-300">Live snapshot of ingestion and processing progress.</p>
+      </header>
+
+      <section class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <article class="bg-slate-800/70 rounded-xl p-6 shadow-md">
+          <h2 class="text-xl font-semibold mb-4">File Status</h2>
+          <canvas id="fileStatusChart" height="180"></canvas>
+        </article>
+        <article class="bg-slate-800/70 rounded-xl p-6 shadow-md">
+          <h2 class="text-xl font-semibold mb-4">Batch Status</h2>
+          <canvas id="batchStatusChart" height="180"></canvas>
+        </article>
+      </section>
+
+      <section class="bg-slate-800/70 rounded-xl p-6 shadow-md">
+        <h2 class="text-xl font-semibold mb-4">Storage Overview</h2>
+        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <dt class="text-sm uppercase text-slate-400">Batch Directory</dt>
+            <dd id="batchStorage" class="text-lg font-medium">–</dd>
+          </div>
+          <div>
+            <dt class="text-sm uppercase text-slate-400">Sorted Directory</dt>
+            <dd id="sortedStorage" class="text-lg font-medium">–</dd>
+          </div>
+        </dl>
+        <p id="lastUpdated" class="text-xs text-slate-500 mt-4"></p>
+      </section>
+    </div>
+
+    <div
+      id="dashboard-data"
+      hx-get="/api/dashboard"
+      hx-trigger="load, every 30s"
+      hx-swap="none"
+    ></div>
+
+    <script>
+      const formatBytes = (value) => {
+        if (value === 0) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const exponent = Math.min(
+          Math.floor(Math.log(value) / Math.log(1024)),
+          units.length - 1
+        );
+        const scaled = value / Math.pow(1024, exponent);
+        return `${scaled.toFixed(1)} ${units[exponent]}`;
+      };
+
+      let fileChart;
+      let batchChart;
+
+      document.body.addEventListener('htmx:afterRequest', (event) => {
+        if (!event.detail || event.detail.elt.id !== 'dashboard-data') return;
+        try {
+          const payload = JSON.parse(event.detail.xhr.responseText);
+          updateSummary(payload);
+        } catch (error) {
+          console.error('Failed to parse dashboard payload', error);
+        }
+      });
+
+      function updateSummary(data) {
+        updateStorage(data.storage || {});
+        renderStatusCharts(data.files || {}, data.batches || {});
+        const timestamp = data.generated_at
+          ? new Date(data.generated_at).toLocaleString()
+          : new Date().toLocaleString();
+        document.getElementById('lastUpdated').textContent = `Updated ${timestamp}`;
+      }
+
+      function updateStorage(storage) {
+        document.getElementById('batchStorage').textContent = formatBytes(
+          storage.batch_dir_bytes || 0
+        );
+        document.getElementById('sortedStorage').textContent = formatBytes(
+          storage.sorted_dir_bytes || 0
+        );
+      }
+
+      function renderStatusCharts(fileSummary, batchSummary) {
+        const fileCtx = document.getElementById('fileStatusChart');
+        const batchCtx = document.getElementById('batchStatusChart');
+
+        const fileLabels = Object.keys(fileSummary.by_status || {});
+        const fileValues = fileLabels.map((label) => fileSummary.by_status[label]);
+
+        const batchLabels = Object.keys(batchSummary.by_status || {});
+        const batchValues = batchLabels.map((label) => batchSummary.by_status[label]);
+
+        if (!fileChart) {
+          fileChart = new Chart(fileCtx, {
+            type: 'doughnut',
+            data: {
+              labels: fileLabels,
+              datasets: [
+                {
+                  data: fileValues,
+                  backgroundColor: ['#22d3ee', '#f97316', '#10b981', '#facc15'],
+                },
+              ],
+            },
+            options: { plugins: { legend: { position: 'bottom' } } },
+          });
+        } else {
+          fileChart.data.labels = fileLabels;
+          fileChart.data.datasets[0].data = fileValues;
+          fileChart.update();
+        }
+
+        if (!batchChart) {
+          batchChart = new Chart(batchCtx, {
+            type: 'bar',
+            data: {
+              labels: batchLabels,
+              datasets: [
+                {
+                  label: 'Batches',
+                  data: batchValues,
+                  backgroundColor: '#6366f1',
+                },
+              ],
+            },
+            options: {
+              plugins: { legend: { display: false } },
+              scales: { y: { beginAtZero: true, precision: 0 } },
+            },
+          });
+        } else {
+          batchChart.data.labels = batchLabels;
+          batchChart.data.datasets[0].data = batchValues;
+          batchChart.update();
+        }
+      }
+    </script>
+  </body>
+</html>
