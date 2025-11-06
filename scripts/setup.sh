@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONFIG_TEMPLATE="$PROJECT_ROOT/config/default_config.yaml"
+INIT_DB_SCRIPT="$PROJECT_ROOT/scripts/init_db.py"
+
 APP_DIR="/opt/media-pipeline"
 PY_ENV="$APP_DIR/.venv"
 DB_DIR="/var/lib/media-pipeline"
@@ -39,7 +44,10 @@ pip install -r "$APP_DIR/requirements.txt"
 
 echo "Writing default config (if missing)..."
 if [ ! -f "$CONFIG_DIR/config.yaml" ]; then
-sudo tee "$CONFIG_DIR/config.yaml" >/dev/null <<'YAML'
+  if [ -f "$CONFIG_TEMPLATE" ]; then
+    sudo cp "$CONFIG_TEMPLATE" "$CONFIG_DIR/config.yaml"
+  else
+    sudo tee "$CONFIG_DIR/config.yaml" >/dev/null <<'YAML'
 paths:
   source_dir: /mnt/nas/photos_raw
   duplicates_dir: /mnt/nas/duplicates
@@ -59,6 +67,7 @@ dedup:
 syncthing:
   api_url: http://127.0.0.1:8384/rest
   api_key: ""
+  folder_id: ""
   poll_interval_sec: 60
   auto_sort_after_sync: true
 
@@ -66,19 +75,28 @@ sorter:
   folder_pattern: "{year}/{month:02d}/{day:02d}"
   exif_fallback: true
 
+auth:
+  api_key: ""
+  header_name: x-api-key
+
 system:
   db_path: /var/lib/media-pipeline/db.sqlite
   log_dir: /var/log/media-pipeline
   port_api: 8080
   port_dbui: 8081
+  max_parallel_fs_ops: 4
   cleanup_empty_batches: true
 YAML
+  fi
 fi
 
 echo "Initializing SQLite database..."
 DB_FILE="$DB_DIR/db.sqlite"
-if [ ! -f "$DB_FILE" ]; then
-sqlite3 "$DB_FILE" <<'SQL'
+if [ -x "$PY_ENV/bin/python" ] && [ -f "$INIT_DB_SCRIPT" ]; then
+  PYTHONPATH="$PROJECT_ROOT" "$PY_ENV/bin/python" "$INIT_DB_SCRIPT" --config "$CONFIG_DIR/config.yaml"
+else
+  if [ ! -f "$DB_FILE" ]; then
+    sqlite3 "$DB_FILE" <<'SQL'
 CREATE TABLE IF NOT EXISTS files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     path TEXT UNIQUE,
@@ -120,6 +138,7 @@ CREATE TABLE IF NOT EXISTS config_changes (
     actor TEXT
 );
 SQL
+  fi
 fi
 
 SERVICE_FILE="/etc/systemd/system/media-pipeline.service"

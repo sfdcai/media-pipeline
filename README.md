@@ -12,13 +12,24 @@ Media Pipeline is a FastAPI-based automation service that synchronizes, sorts, a
 
 ## Getting Started
 
-The easiest way to install Media Pipeline on a fresh host is via the automated installer, which prepares system dependencies, downloads the latest GitHub release, and provisions the Python environment.
+### Automated Provisioning (recommended)
+
+Fresh machines can be bootstrapped end-to-end with the bundled shell scripts. Run the following commands in order:
 
 ```bash
+# 1. Install system dependencies, download the release bundle, and create /opt/media-pipeline
 curl -fsSL https://raw.githubusercontent.com/sfdcai/media-pipeline/main/scripts/install.sh | bash
+
+# 2. Ensure configuration, database schema, and service scaffolding are in place
+sudo /opt/media-pipeline/scripts/setup.sh
+
+# 3. Launch the API and SQLite web UI (backgrounded; logs land in /opt/media-pipeline/data/logs)
+sudo /opt/media-pipeline/scripts/run.sh
 ```
 
-> **Note:** The installer detects the local package manager (APT, DNF/YUM, or Homebrew) and may prompt for sudo privileges while installing dependencies.
+The installer detects the host package manager (APT, DNF/YUM, Homebrew) and may prompt for elevated privileges while installing prerequisites. The setup script copies `config/default_config.yaml` into `/etc/media-pipeline/config.yaml` when no user file exists, initializes `/var/lib/media-pipeline/db.sqlite`, and ensures `/var/log/media-pipeline` plus `/opt/media-pipeline/data/*` directories are present.
+
+To start the stack after a reboot, rerun `run.sh` (steps 1–2 are only needed when upgrading or reinstalling).
 
 ### Manual Installation
 
@@ -41,6 +52,22 @@ curl -fsSL https://raw.githubusercontent.com/sfdcai/media-pipeline/main/scripts/
    ```bash
    uvicorn main:app --reload --host 0.0.0.0 --port 8080
    ```
+
+### Starting Processes Individually
+
+If you prefer to manage components yourself, activate the virtual environment created by the installer and start each service explicitly:
+
+```bash
+source /opt/media-pipeline/.venv/bin/activate
+
+# API server (logs to stdout)
+uvicorn main:app --host 0.0.0.0 --port 8080
+
+# SQLite web UI (DB browser)
+sqlite_web /var/lib/media-pipeline/db.sqlite --host 0.0.0.0 --port 8081
+```
+
+Backgrounded processes started via `run.sh` emit logs to `/opt/media-pipeline/data/logs/api.log` and `/opt/media-pipeline/data/logs/dbui.log`.
 
 ## Configuration
 

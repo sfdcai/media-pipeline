@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+- chore(config): add repository default config template and load-time fallback
+- chore(install): bootstrap config and database using shared helper script
+- chore(setup): reuse default template and schema helper during manual installs
+- feat(scripts): add CLI to initialize the SQLite database schema
+
 ## v0.1.0 (scaffold)
 - Repository structure
 - Docs
