@@ -202,11 +202,68 @@ Acceptance:
 - Idempotent re-run
 Status: ✅ Implemented hashing service, status endpoint, and tests.
 
-## TASK-002: Implement /api/batch/create
+## TASK-002: Implement /api/config GET and PUT
+Status: TODO  
+Context: docs/API.md §Config  
 Acceptance:
-- Respects max_size_gb
-- Deterministic ordering
-- Writes manifest.json
-- Updates DB
+- Load YAML from config path, return as JSON
+- PUT merges updates, writes YAML back, logs in config_changes table
+- Idempotent and validated
+
+## TASK-003: Implement /api/batch/create
+Status: TODO  
+Context: docs/API.md §Batch  
+Acceptance:
+- Select UNIQUE files until max_size_gb
+- Move to new batch_xxx folder under batch_dir
+- Write manifest.json and update DB
+- Return manifest summary
+
+## TASK-004: Implement /api/sync/start and /api/sync/status
+Status: TODO  
+Context: docs/API.md §Sync  
+Acceptance:
+- Start sync (move batch to syncthing folder)
+- Poll Syncthing REST, compute progress %
+- Mark batch SYNCED when complete
+
+## TASK-005: Implement /api/sort/start and /api/sort/status
+Status: TODO  
+Context: docs/API.md §Sort  
+Acceptance:
+- Read EXIF, fallback to mtime
+- Move files to sorted/YYYY/MM/DD
+- Update DB target_path, set status SORTED
+
+## TASK-006: Implement Cleanup module and /api/cleanup/run
+Status: TODO  
+Context: docs/API.md §Cleanup  
+Acceptance:
+- Remove empty batch folders, old temp files, rotate logs
+- Config-controlled; logs each action
+
+## TASK-007: Implement /api/dashboard summary
+Status: TODO  
+Context: docs/API.md §Dashboard  
+Acceptance:
+- Aggregate totals (unique, duplicates, batches synced/sorted, storage usage)
+- Return JSON for UI charts
+
+## TASK-008: Add minimal HTMX dashboard (Phase 2)
+Status: TODO  
+Context: docs/ROADMAP.md  
+Acceptance:
+- Serve static HTML with summary charts via /dashboard
+- Read data from /api/dashboard
+- Tailwind + Chart.js, no JS build step
+
+## TASK-009: Implement Auth middleware (API key)
+Status: TODO  
+Context: docs/SECURITY.md  
+Acceptance:
+- Optional token from .env or config
+- Deny unauthenticated requests if enabled
+- Exclude /health and /dbui
+
 
 ... add more tasks as needed.
