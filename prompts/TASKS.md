@@ -203,16 +203,16 @@ Acceptance:
 Status: ✅ Implemented hashing service, status endpoint, and tests.
 
 ## TASK-002: Implement /api/config GET and PUT
-Status: TODO  
-Context: docs/API.md §Config  
+Status: ✅ Added configuration GET/PUT endpoints with merge, persistence, and audit logging.
+Context: docs/API.md §Config
 Acceptance:
 - Load YAML from config path, return as JSON
 - PUT merges updates, writes YAML back, logs in config_changes table
 - Idempotent and validated
 
 ## TASK-003: Implement /api/batch/create
-Status: TODO  
-Context: docs/API.md §Batch  
+Status: ✅ Added batch creation service, API endpoint, and tests.
+Context: docs/API.md §Batch
 Acceptance:
 - Select UNIQUE files until max_size_gb
 - Move to new batch_xxx folder under batch_dir

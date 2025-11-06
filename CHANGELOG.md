@@ -10,3 +10,5 @@
 ## v0.2.0
 - feat(dedup): implement hashing service and API endpoints
 - add SQLite manager, config loader, and hashing utilities
+- feat(config): add configuration API with YAML persistence and audit logging
+- feat(batch): add batch creation service, API endpoint, and tests
