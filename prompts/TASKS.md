@@ -203,8 +203,8 @@ Acceptance:
 Status: ✅ Implemented hashing service, status endpoint, and tests.
 
 ## TASK-002: Implement /api/config GET and PUT
-Status: TODO  
-Context: docs/API.md §Config  
+Status: ✅ Added configuration GET/PUT endpoints with merge, persistence, and audit logging.
+Context: docs/API.md §Config
 Acceptance:
 - Load YAML from config path, return as JSON
 - PUT merges updates, writes YAML back, logs in config_changes table
