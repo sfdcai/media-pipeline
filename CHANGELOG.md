@@ -6,3 +6,7 @@
 - Setup & run scripts
 - FastAPI skeleton
 - SQLite schema init
+
+## v0.2.0
+- feat(dedup): implement hashing service and API endpoints
+- add SQLite manager, config loader, and hashing utilities

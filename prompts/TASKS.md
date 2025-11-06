@@ -200,6 +200,7 @@ Acceptance:
 - Hashes files deterministically
 - Updates DB with status
 - Idempotent re-run
+Status: ✅ Implemented hashing service, status endpoint, and tests.
 
 ## TASK-002: Implement /api/batch/create
 Acceptance:
