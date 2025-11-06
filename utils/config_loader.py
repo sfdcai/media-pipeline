@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, MutableMapping
 
@@ -17,10 +18,29 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "sorted_dir": str(Path("/var/lib/media-pipeline/sorted")),
         "temp_dir": str(Path("/var/lib/media-pipeline/temp")),
     },
+    "batch": {
+        "max_size_gb": 15,
+        "naming_pattern": "batch_{index:03d}",
+    },
     "dedup": {
         "hash_algorithm": "sha256",
         "threads": 2,
         "move_duplicates": False,
+    },
+    "syncthing": {
+        "api_url": "http://127.0.0.1:8384/rest",
+        "api_key": "",
+        "folder_id": "",
+        "poll_interval_sec": 60,
+        "auto_sort_after_sync": True,
+    },
+    "sorter": {
+        "folder_pattern": "{year}/{month:02d}/{day:02d}",
+        "exif_fallback": True,
+    },
+    "auth": {
+        "api_key": "",
+        "header_name": "x-api-key",
     },
     "system": {
         "db_path": str(Path("/var/lib/media-pipeline/db.sqlite")),
@@ -48,19 +68,56 @@ def _deep_merge(
     return base
 
 
-def load_config(path: Path | str | None = None) -> Dict[str, Any]:
-    """Load configuration from YAML, falling back to defaults when absent."""
+def resolve_config_path(path: Path | str | None = None) -> Path:
+    """Resolve the configuration file path using overrides or defaults."""
 
-    candidate = Path(path) if path else None
-    if candidate is None:
-        env_override = os.getenv("MEDIA_PIPELINE_CONFIG")
-        candidate = Path(env_override) if env_override else DEFAULT_CONFIG_PATH
+    if path is not None:
+        return Path(path)
 
+    env_override = os.getenv("MEDIA_PIPELINE_CONFIG")
+    if env_override:
+        return Path(env_override)
+    return DEFAULT_CONFIG_PATH
+
+
+def load_raw_config(path: Path | str | None = None) -> Dict[str, Any]:
+    """Load configuration data from YAML without applying defaults."""
+
+    candidate = resolve_config_path(path)
     if candidate.exists():
         with candidate.open("r", encoding="utf-8") as handle:
             data = yaml.safe_load(handle) or {}
     else:
         data = {}
+    if not isinstance(data, dict):
+        raise ValueError("Configuration file must contain a mapping at the top level")
+    return data
+
+
+def merge_configs(
+    base: MutableMapping[str, Any], override: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
+    """Return a deep-merged copy of *base* updated with *override*."""
+
+    merged = deepcopy(base)
+    _deep_merge(merged, override)
+    return merged
+
+
+def save_config(data: MutableMapping[str, Any], path: Path | str | None = None) -> Path:
+    """Persist configuration data to YAML on disk."""
+
+    candidate = resolve_config_path(path)
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    with candidate.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(data, handle, sort_keys=True, allow_unicode=True)
+    return candidate
+
+
+def load_config(path: Path | str | None = None) -> Dict[str, Any]:
+    """Load configuration from YAML, falling back to defaults when absent."""
+
+    data = load_raw_config(path)
 
     merged = yaml.safe_load(yaml.dump(DEFAULT_CONFIG))
     if isinstance(data, dict):
@@ -81,4 +138,13 @@ def get_config_value(
     return current
 
 
-__all__ = ["load_config", "get_config_value", "DEFAULT_CONFIG_PATH", "DEFAULT_CONFIG"]
+__all__ = [
+    "load_config",
+    "load_raw_config",
+    "save_config",
+    "merge_configs",
+    "resolve_config_path",
+    "get_config_value",
+    "DEFAULT_CONFIG_PATH",
+    "DEFAULT_CONFIG",
+]

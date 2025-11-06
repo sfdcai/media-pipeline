@@ -1,0 +1,70 @@
+name: Release on Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  package-and-release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest
+
+      - name: Build archive
+        run: |
+          mkdir -p dist
+          tar --exclude-vcs -czf dist/media-pipeline.tar.gz .
+
+      - name: Derive release metadata
+        id: meta
+        run: |
+          TAG="v$(date +%Y%m%d%H%M)-pr${{ github.event.pull_request.number }}"
+          NAME="PR #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}"
+          BODY="Automated release for PR #${{ github.event.pull_request.number }} merged into main.%0A%0A* Title: ${{ github.event.pull_request.title }}%0A* Merge SHA: ${{ github.event.pull_request.merge_commit_sha }}"
+          {
+            echo "tag=$TAG"
+            echo "name=$NAME"
+            echo "body=$BODY"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          release_name: ${{ steps.meta.outputs.name }}
+          target_commitish: ${{ github.event.pull_request.merge_commit_sha }}
+          body: ${{ steps.meta.outputs.body }}
+          draft: false
+          prerelease: false
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: dist/media-pipeline.tar.gz
+          asset_name: media-pipeline.tar.gz
+          asset_content_type: application/gzip
