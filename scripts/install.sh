@@ -8,6 +8,7 @@ VENV_DIR="$INSTALL_DIR/.venv"
 RELEASE_CHANNEL="latest"
 OWNER_USER="${SUDO_USER:-$USER}"
 OWNER_GROUP="$(id -gn "$OWNER_USER" 2>/dev/null || id -gn)"
+CONFIG_DEST="/etc/media-pipeline/config.yaml"
 
 usage() {
   cat <<USAGE
@@ -171,8 +172,13 @@ post_install() {
   $sudo_cmd mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/data/logs" "$INSTALL_DIR/data/manifests" "$INSTALL_DIR/data/temp"
   $sudo_cmd mkdir -p /var/lib/media-pipeline /var/log/media-pipeline
   $sudo_cmd mkdir -p /etc/media-pipeline
-  if [[ ! -f /etc/media-pipeline/config.yaml ]]; then
-    $sudo_cmd tee /etc/media-pipeline/config.yaml >/dev/null <<'YAML'
+
+  local config_template="$INSTALL_DIR/config/default_config.yaml"
+  if [[ -f "$config_template" && ! -f "$CONFIG_DEST" ]]; then
+    $sudo_cmd cp "$config_template" "$CONFIG_DEST"
+  elif [[ ! -f "$CONFIG_DEST" ]]; then
+    log "Default config template missing; generating fallback config"
+    $sudo_cmd tee "$CONFIG_DEST" >/dev/null <<'YAML'
 paths:
   source_dir: /mnt/nas/photos_raw
   duplicates_dir: /mnt/nas/duplicates
@@ -192,6 +198,7 @@ dedup:
 syncthing:
   api_url: http://127.0.0.1:8384/rest
   api_key: ""
+  folder_id: ""
   poll_interval_sec: 60
   auto_sort_after_sync: true
 
@@ -199,16 +206,26 @@ sorter:
   folder_pattern: "{year}/{month:02d}/{day:02d}"
   exif_fallback: true
 
+auth:
+  api_key: ""
+  header_name: x-api-key
+
 system:
   db_path: /var/lib/media-pipeline/db.sqlite
   log_dir: /var/log/media-pipeline
   port_api: 8080
   port_dbui: 8081
+  max_parallel_fs_ops: 4
   cleanup_empty_batches: true
 YAML
   fi
 
   $sudo_cmd touch /var/log/media-pipeline/app.log
+  local python_exec="$VENV_DIR/bin/python"
+  if [[ -x "$python_exec" && -f "$INSTALL_DIR/scripts/init_db.py" ]]; then
+    log "Initializing database schema"
+    $sudo_cmd env PYTHONPATH="$INSTALL_DIR" "$python_exec" "$INSTALL_DIR/scripts/init_db.py" --config "$CONFIG_DEST"
+  fi
   $sudo_cmd chown -R "$OWNER_USER":"$OWNER_GROUP" "$INSTALL_DIR" /var/lib/media-pipeline /var/log/media-pipeline
 
   log "Installer complete"
