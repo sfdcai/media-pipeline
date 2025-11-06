@@ -211,8 +211,8 @@ Acceptance:
 - Idempotent and validated
 
 ## TASK-003: Implement /api/batch/create
-Status: TODO  
-Context: docs/API.md §Batch  
+Status: ✅ Added batch creation service, API endpoint, and tests.
+Context: docs/API.md §Batch
 Acceptance:
 - Select UNIQUE files until max_size_gb
 - Move to new batch_xxx folder under batch_dir

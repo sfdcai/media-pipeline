@@ -1,0 +1,122 @@
+import asyncio
+import json
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from api.batch_router import create_batch
+from modules.batch import BatchService, FILE_STATUS_BATCHED
+from modules.dedup import FILE_STATUS_UNIQUE
+from utils.db_manager import DatabaseManager
+
+
+def _insert_file(db: DatabaseManager, path: Path, size: int, sha: str) -> None:
+    db.execute(
+        """
+        INSERT INTO files(path, size, status, sha256)
+        VALUES(?, ?, ?, ?)
+        """,
+        (str(path), size, FILE_STATUS_UNIQUE, sha),
+    ).close()
+
+
+def test_batch_service_creates_manifest_and_moves_files(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    nested_dir = source_dir / "nested"
+    nested_dir.mkdir()
+    batch_dir = tmp_path / "batches"
+    db = DatabaseManager(tmp_path / "db.sqlite")
+
+    file_one = source_dir / "one.txt"
+    file_two = nested_dir / "two.txt"
+    file_one.write_text("alpha", encoding="utf-8")
+    file_two.write_text("beta", encoding="utf-8")
+
+    size_one = file_one.stat().st_size
+    size_two = file_two.stat().st_size
+
+    _insert_file(db, file_one, size_one, "sha-one")
+    _insert_file(db, file_two, size_two, "sha-two")
+
+    service = BatchService(
+        db,
+        source_dir=source_dir,
+        batch_dir=batch_dir,
+        max_size_gb=1,
+        naming_pattern="batch_{index:02d}",
+    )
+
+    result = service.create_batch()
+
+    assert result.created is True
+    assert result.batch_name is not None
+    assert result.file_count == 2
+    assert result.size_bytes == size_one + size_two
+    assert result.manifest_path is not None
+
+    manifest_path = Path(result.manifest_path)
+    assert manifest_path.exists()
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["file_count"] == 2
+    batch_paths = {entry["batch_path"] for entry in manifest["files"]}
+    assert all(Path(path).exists() for path in batch_paths)
+    assert not file_one.exists()
+    assert not file_two.exists()
+
+    rows = db.fetchall("SELECT path, status, batch_id FROM files ORDER BY path")
+    assert all(row["status"] == FILE_STATUS_BATCHED for row in rows)
+    assert all(row["batch_id"] for row in rows)
+
+    batch_record = db.fetchone(
+        "SELECT name, file_count, size_bytes, status, manifest_path FROM batches WHERE name = ?",
+        (result.batch_name,),
+    )
+    assert batch_record is not None
+    assert batch_record["file_count"] == 2
+    assert batch_record["status"] == "PENDING"
+    assert Path(batch_record["manifest_path"]).exists()
+
+    second = service.create_batch()
+    assert second.created is False
+
+    db.close()
+
+
+def test_batch_router_creates_batch_response(tmp_path: Path) -> None:
+    asyncio.run(_run_router_scenario(tmp_path))
+
+
+async def _run_router_scenario(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    batch_dir = tmp_path / "batch"
+    db = DatabaseManager(tmp_path / "db.sqlite")
+
+    file_path = source_dir / "solo.txt"
+    file_path.write_text("payload", encoding="utf-8")
+    size = file_path.stat().st_size
+
+    _insert_file(db, file_path, size, "sha-solo")
+
+    service = BatchService(
+        db,
+        source_dir=source_dir,
+        batch_dir=batch_dir,
+        max_size_gb=1,
+    )
+
+    response = await create_batch(service=service)
+    assert response.created is True
+    assert response.file_count == 1
+    assert response.batch_name is not None
+    assert response.manifest_path is not None
+
+    follow_up = await create_batch(service=service)
+    assert follow_up.created is False
+
+    db.close()
