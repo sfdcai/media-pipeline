@@ -8,7 +8,7 @@ You may:
 - Pick the first task with `Status: TODO`
 - Implement the code and tests
 - Mark it as `Status: DONE`
-- Optionally add **at most one** new `TODO` task if something truly missing was discovered.
+- Optionally add **at most three** new `TODO` task if something truly missing was discovered.
 
 You must not:
 - Execute arbitrary shell commands
