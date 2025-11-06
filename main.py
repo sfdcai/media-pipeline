@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
+from api.config_router import router as config_router
 from api.dedup_router import router as dedup_router
 from modules.dedup import DedupService
 from utils.config_loader import get_config_value, load_config
@@ -38,6 +39,7 @@ def _initialize_services(application: FastAPI) -> None:
 
 _initialize_services(app)
 app.include_router(dedup_router)
+app.include_router(config_router)
 
 
 @app.get("/health")
