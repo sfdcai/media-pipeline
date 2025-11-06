@@ -220,7 +220,7 @@ Acceptance:
 - Return manifest summary
 
 ## TASK-004: Implement /api/sync/start and /api/sync/status
-Status: TODO  
+Status: ✅ Added sync service with Syncthing integration and progress endpoints.
 Context: docs/API.md §Sync  
 Acceptance:
 - Start sync (move batch to syncthing folder)
@@ -228,7 +228,7 @@ Acceptance:
 - Mark batch SYNCED when complete
 
 ## TASK-005: Implement /api/sort/start and /api/sort/status
-Status: TODO  
+Status: ✅ Delivered EXIF-aware sorting service, API, and persistence updates.
 Context: docs/API.md §Sort  
 Acceptance:
 - Read EXIF, fallback to mtime
@@ -236,21 +236,21 @@ Acceptance:
 - Update DB target_path, set status SORTED
 
 ## TASK-006: Implement Cleanup module and /api/cleanup/run
-Status: TODO  
+Status: ✅ Added maintenance service for empty batches, temp pruning, and log rotation.
 Context: docs/API.md §Cleanup  
 Acceptance:
 - Remove empty batch folders, old temp files, rotate logs
 - Config-controlled; logs each action
 
 ## TASK-007: Implement /api/dashboard summary
-Status: TODO  
+Status: ✅ Aggregates database metrics and filesystem usage for dashboard API.
 Context: docs/API.md §Dashboard  
 Acceptance:
 - Aggregate totals (unique, duplicates, batches synced/sorted, storage usage)
 - Return JSON for UI charts
 
 ## TASK-008: Add minimal HTMX dashboard (Phase 2)
-Status: TODO  
+Status: ✅ Created Tailwind/HTMX dashboard consuming API metrics and charts.
 Context: docs/ROADMAP.md  
 Acceptance:
 - Serve static HTML with summary charts via /dashboard
@@ -258,7 +258,7 @@ Acceptance:
 - Tailwind + Chart.js, no JS build step
 
 ## TASK-009: Implement Auth middleware (API key)
-Status: TODO  
+Status: ✅ Added configurable API-key middleware with optional exemptions.
 Context: docs/SECURITY.md  
 Acceptance:
 - Optional token from .env or config

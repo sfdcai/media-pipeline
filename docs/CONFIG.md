@@ -19,11 +19,15 @@ dedup:
 syncthing:
   api_url: http://127.0.0.1:8384/rest
   api_key: ""
+  folder_id: ""
   poll_interval_sec: 60
   auto_sort_after_sync: true
 sorter:
   folder_pattern: "{year}/{month:02d}/{day:02d}"
   exif_fallback: true
+auth:
+  api_key: ""
+  header_name: x-api-key
 system:
   db_path: /var/lib/media-pipeline/db.sqlite
   log_dir: /var/log/media-pipeline

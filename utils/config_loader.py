@@ -18,10 +18,29 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "sorted_dir": str(Path("/var/lib/media-pipeline/sorted")),
         "temp_dir": str(Path("/var/lib/media-pipeline/temp")),
     },
+    "batch": {
+        "max_size_gb": 15,
+        "naming_pattern": "batch_{index:03d}",
+    },
     "dedup": {
         "hash_algorithm": "sha256",
         "threads": 2,
         "move_duplicates": False,
+    },
+    "syncthing": {
+        "api_url": "http://127.0.0.1:8384/rest",
+        "api_key": "",
+        "folder_id": "",
+        "poll_interval_sec": 60,
+        "auto_sort_after_sync": True,
+    },
+    "sorter": {
+        "folder_pattern": "{year}/{month:02d}/{day:02d}",
+        "exif_fallback": True,
+    },
+    "auth": {
+        "api_key": "",
+        "header_name": "x-api-key",
     },
     "system": {
         "db_path": str(Path("/var/lib/media-pipeline/db.sqlite")),
