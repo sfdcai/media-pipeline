@@ -13,7 +13,7 @@ from api.workflow_router import (
     workflow_sync,
     workflow_sync_refresh,
 )
-from modules.batch import BatchCreationResult
+from modules.batch import BatchCreationResult, BATCH_STATUS_SYNCED, BATCH_STATUS_PENDING
 from modules.cleanup import CleanupReport
 from modules.exif_sorter import SortResult
 from modules.sync_monitor import SyncStartResult, SyncStatus
@@ -102,6 +102,81 @@ class StubCleanupService:
         )
 
 
+class BlockingBatchService:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def create_batch(self) -> BatchCreationResult:
+        self.calls += 1
+        if self.calls == 1:
+            return BatchCreationResult(
+                created=False,
+                reason="Batch 'batch_001' is still synced",
+                blocking_batch="batch_001",
+                blocking_batch_id=1,
+                blocking_status=BATCH_STATUS_SYNCED,
+            )
+        return BatchCreationResult(
+            created=True,
+            batch_id=2,
+            batch_name="batch_002",
+            file_count=1,
+            size_bytes=42,
+            manifest_path="/tmp/batch_002/manifest.json",
+        )
+
+
+class RecordingSortService(StubSortService):
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def start(self, batch_name: str) -> SortResult:
+        self.calls.append(batch_name)
+        return SortResult(batch=batch_name, sorted_files=1, skipped_files=0, started=True)
+
+
+class SequencingDatabase:
+    def fetchall(self, query: str, params: tuple[object, ...] | None = None):
+        if "FROM batches" in query:
+            return [
+                {
+                    "id": 1,
+                    "name": "batch_001",
+                    "status": BATCH_STATUS_SYNCED,
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "synced_at": "2024-01-01T00:05:00Z",
+                    "sorted_at": None,
+                    "manifest_path": "/tmp/batch_001/manifest.json",
+                },
+                {
+                    "id": 2,
+                    "name": "batch_002",
+                    "status": BATCH_STATUS_PENDING,
+                    "created_at": "2024-01-02T00:00:00Z",
+                    "synced_at": None,
+                    "sorted_at": None,
+                    "manifest_path": "/tmp/batch_002/manifest.json",
+                },
+            ]
+        return [{"status": "UNIQUE", "count": 2}]
+
+    def fetchone(self, query: str, params: tuple[object, ...] | None = None):
+        if "WHERE id = ?" in query and params:
+            batch_id = int(params[0])
+            if batch_id == 1:
+                return {"id": 1, "name": "batch_001", "status": BATCH_STATUS_SYNCED}
+            if batch_id == 2:
+                return {"id": 2, "name": "batch_002", "status": BATCH_STATUS_PENDING}
+        return None
+
+    def execute(self, *args, **kwargs):  # pragma: no cover - not used in assertions
+        class _Cursor:
+            def close(self_nonlocal) -> None:  # noqa: D401 - simple stub
+                return None
+
+        return _Cursor()
+
+
 class StubDatabase:
     def fetchall(self, query: str, params: tuple[object, ...] | None = None):
         if "FROM batches" in query:
@@ -166,6 +241,30 @@ async def test_workflow_orchestrator_overview_includes_last_run():
     assert overview["last_run"]["steps"]
     assert overview["config"]["path"].endswith("config.yaml")
     assert overview["syncing_batches"]
+
+
+@pytest.mark.anyio
+async def test_workflow_retries_batch_after_sorting_blocking_synced_batch():
+    batch_service = BlockingBatchService()
+    sort_service = RecordingSortService()
+    container = SimpleNamespace(
+        config={"system": {"log_dir": "/var/log/media-pipeline"}},
+        config_path=Path("/etc/media-pipeline/config.yaml"),
+        database=SequencingDatabase(),
+        dedup_service=StubDedupService(),
+        batch_service=batch_service,
+        sync_service=StubSyncService(),
+        sort_service=sort_service,
+        cleanup_service=StubCleanupService(),
+    )
+    orchestrator = WorkflowOrchestrator(container)  # type: ignore[arg-type]
+
+    result = await orchestrator.run_pipeline()
+
+    assert batch_service.calls >= 2
+    assert "batch_001" in sort_service.calls
+    assert any(step.name == "batch" and step.status == "completed" for step in result.steps)
+    assert any(step.name == "sort" and step.data.get("batch") == "batch_001" for step in result.steps)
 
 
 class FakeManager:

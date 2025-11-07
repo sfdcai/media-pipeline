@@ -215,16 +215,6 @@ We are actively tracking the next improvements for the pipeline:
 
 See [`prompts/TASKS.md`](prompts/TASKS.md) for the detailed task breakdown and status.
 
-## Enhancement Opportunities
-
-We are actively tracking the next improvements for the pipeline:
-
-- **Systemd hardening:** ship dedicated unit files for the API and sqlite-web processes (socket activation, restart policies, log forwarding).
-- **Observability:** emit Prometheus metrics and structured traces so that sync throughput and error rates can be graphed over time.
-- **Live log streaming:** surface tail-follow views in the control center to monitor API and worker output in real time.
-
-See [`prompts/TASKS.md`](prompts/TASKS.md) for the detailed task breakdown and status.
-
 ## Debugging
 
 Use the bundled debug helper to collect environment diagnostics when investigating issues:

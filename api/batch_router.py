@@ -29,6 +29,8 @@ class BatchCreateResponse(BaseModel):
     files: list[BatchFileModel] = Field(default_factory=list)
     reason: str | None = None
     blocking_batch: str | None = None
+    blocking_batch_id: int | None = None
+    blocking_status: str | None = None
 
 
 async def get_batch_service(request: Request) -> BatchService:

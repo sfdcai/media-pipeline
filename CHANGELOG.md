@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- fix(cleanup): restrict upload cleanup to empty batch directories that match the configured naming pattern
+- fix(workflow): retry batch creation after auto-sorting blocking synced batches and expose blocking batch id/status in API responses
+- test: cover cleanup filtering and the synced-batch retry path in workflow orchestration
 - fix(api): serialize dataclass responses with `asdict` to support slots-based models across cleanup/sort/sync endpoints
 - feat(batch): add file-count selection mode, sequential batch guard, and expose skip reasons in API responses
 - fix(config): rebuild the FastAPI service container after `/api/config` updates so every module reads a single config snapshot

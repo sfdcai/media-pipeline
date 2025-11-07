@@ -35,9 +35,11 @@ total reaches `batch.max_size_gb`. When set to `files`, the service stops after
 `created`, `batch_name`, `file_count`, and `size_bytes`.
 
 If `batch.allow_parallel` is `false` (the default) and another batch has not yet
-reached `SORTED`, the response is `{ "created": false, "reason": "...", "blocking_batch": "batch_001" }`. This guards
-single-folder Syncthing deployments from generating overlapping batches. The
-`reason` and `blocking_batch` fields are omitted when a new batch is created
+reached `SORTED`, the response includes `{ "created": false, "reason": "...", "blocking_batch": "batch_001", "blocking_batch_id": 1, "blocking_status": "SYNCED" }`. This guards
+single-folder Syncthing deployments from generating overlapping batches while
+surfacing which batch is blocking progress. When the blocker is already
+`SYNCED`, the workflow will automatically attempt to sort it and retry batch
+creation. All `blocking_*` fields are omitted when a new batch is created
 successfully.
 
 ## Workflow

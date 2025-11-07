@@ -61,6 +61,8 @@ class BatchCreationResult:
     files: List[BatchFileRecord] = field(default_factory=list)
     reason: Optional[str] = None
     blocking_batch: Optional[str] = None
+    blocking_batch_id: Optional[int] = None
+    blocking_status: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -74,6 +76,8 @@ class BatchCreationResult:
             "files": [record.to_dict() for record in self.files],
             "reason": self.reason,
             "blocking_batch": self.blocking_batch,
+            "blocking_batch_id": self.blocking_batch_id,
+            "blocking_status": self.blocking_status,
         }
 
 
@@ -108,7 +112,8 @@ class BatchService:
         if not self._allow_parallel:
             guard = self._active_batch_guard()
             if guard is not None:
-                name, status = guard
+                name = guard["name"]
+                status = guard["status"]
                 message = (
                     f"Batch '{name}' is still {status.lower()}"
                     if status
@@ -118,6 +123,8 @@ class BatchService:
                     created=False,
                     reason=message,
                     blocking_batch=name,
+                    blocking_batch_id=guard.get("id"),
+                    blocking_status=status,
                 )
 
         candidates = self._fetch_candidates()
@@ -282,10 +289,10 @@ class BatchService:
         row["size"] = int(size_value)
         return row
 
-    def _active_batch_guard(self) -> tuple[str, str] | None:
+    def _active_batch_guard(self) -> dict[str, str | int] | None:
         row = self._db.fetchone(
             """
-            SELECT name, status
+            SELECT id, name, status
             FROM batches
             WHERE status IN (?, ?, ?, ?, ?)
             ORDER BY datetime(created_at) ASC
@@ -301,7 +308,17 @@ class BatchService:
         )
         if row is None:
             return None
-        return str(row["name"]), str(row["status"])
+        result: dict[str, str | int] = {
+            "name": str(row["name"]),
+            "status": str(row["status"]),
+        }
+        try:
+            batch_id = row["id"]
+        except (KeyError, IndexError, TypeError):  # pragma: no cover - defensive
+            batch_id = None
+        if batch_id is not None:
+            result["id"] = int(batch_id)
+        return result
 
     def _generate_batch_name(self) -> str:
         index = 1

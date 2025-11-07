@@ -13,12 +13,18 @@ from modules.cleanup import CleanupService
 def test_cleanup_service_removes_stale_artifacts(tmp_path: Path) -> None:
     batch_dir = tmp_path / "batches"
     batch_dir.mkdir()
-    empty_batch = batch_dir / "batch_empty"
+    empty_batch = batch_dir / "batch_001"
     empty_batch.mkdir()
 
-    non_empty_batch = batch_dir / "batch_keep"
+    non_empty_batch = batch_dir / "keep_me"
     non_empty_batch.mkdir()
     (non_empty_batch / "file.txt").write_text("keep", encoding="utf-8")
+
+    protected_dir = batch_dir / ".stfolder"
+    protected_dir.mkdir()
+
+    external_dir = batch_dir / "USB"
+    external_dir.mkdir()
 
     temp_dir = tmp_path / "temp"
     temp_dir.mkdir()
@@ -41,12 +47,15 @@ def test_cleanup_service_removes_stale_artifacts(tmp_path: Path) -> None:
         log_dir=log_dir,
         temp_retention_days=7,
         log_max_bytes=1024 * 1024,
+        batch_pattern="batch_{index:03d}",
     )
 
     report = service.run()
 
     assert str(empty_batch) in report.removed_batch_dirs
     assert empty_batch.exists() is False
+    assert protected_dir.exists()
+    assert external_dir.exists()
     assert str(stale_file) in report.deleted_temp_files
     assert fresh_file.exists()
     assert report.rotated_logs

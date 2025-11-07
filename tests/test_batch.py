@@ -8,7 +8,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from api.batch_router import create_batch
-from modules.batch import BatchService, FILE_STATUS_BATCHED
+from modules.batch import BatchService, FILE_STATUS_BATCHED, BATCH_STATUS_PENDING
 from modules.dedup import FILE_STATUS_UNIQUE
 from utils.db_manager import DatabaseManager
 
@@ -181,6 +181,8 @@ def test_batch_service_blocks_until_previous_sorted(tmp_path: Path) -> None:
     assert blocked.created is False
     assert blocked.reason is not None
     assert blocked.blocking_batch == first_batch.batch_name
+    assert blocked.blocking_batch_id == first_batch.batch_id
+    assert blocked.blocking_status == BATCH_STATUS_PENDING
 
     db.execute(
         "UPDATE batches SET status = ?, sorted_at = datetime('now') WHERE id = ?",

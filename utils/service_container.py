@@ -149,6 +149,7 @@ def build_service_container(
         batch_dir=batch_dir,
         temp_dir=temp_dir,
         log_dir=Path(get_config_value("system", "log_dir", config=config_data)),
+        batch_pattern=str(batch_pattern) if batch_pattern is not None else None,
     )
     dashboard_service = DashboardService(
         database,

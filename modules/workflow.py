@@ -212,7 +212,33 @@ class WorkflowOrchestrator:
             errors.append(f"dedup: {dedup_result.message}")
 
         batch_result = self.run_batch()
-        steps.append(batch_result)
+        batch_steps: list[PipelineStepResult] = [batch_result]
+
+        blocking_data = batch_result.data if batch_result.data else {}
+        blocking_status = blocking_data.get("blocking_status") if isinstance(blocking_data, dict) else None
+        blocking_batch_id = (
+            blocking_data.get("blocking_batch_id") if isinstance(blocking_data, dict) else None
+        )
+        if (
+            batch_result.status == "skipped"
+            and blocking_status == BATCH_STATUS_SYNCED
+            and blocking_batch_id is not None
+        ):
+            try:
+                target_batch_id = int(blocking_batch_id)
+            except (TypeError, ValueError):
+                target_batch_id = None
+            if target_batch_id is not None:
+                sort_existing = self.run_sort(target_batch_id)
+                batch_steps.append(sort_existing)
+                if sort_existing.status == "error" and sort_existing.message:
+                    errors.append(f"sort: {sort_existing.message}")
+                if sort_existing.status in {"completed", "skipped"}:
+                    retry_result = self.run_batch()
+                    batch_steps.append(retry_result)
+                    batch_result = retry_result
+
+        steps.extend(batch_steps)
         batch_id = batch_result.data.get("batch_id") if batch_result.data else None
         if batch_result.status == "error" and batch_result.message:
             errors.append(f"batch: {batch_result.message}")
