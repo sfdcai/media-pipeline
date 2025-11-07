@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from api.batch_router import router as batch_router
@@ -70,6 +70,7 @@ def _configure_auth(application: FastAPI) -> None:
         "",
         "/",
         "/health",
+        "/config",
         "/dashboard",
         "/docs",
         "/openapi.json",
@@ -101,6 +102,16 @@ def dashboard(request: Request) -> HTMLResponse:
 @app.get("/control", response_class=HTMLResponse)
 def control_center(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("control.html", {"request": request})
+
+
+@app.get("/config", response_class=JSONResponse)
+async def configuration_snapshot(request: Request) -> JSONResponse:
+    """Expose the effective configuration for convenience tooling."""
+
+    config = getattr(request.app.state, "config", None)
+    if not isinstance(config, dict):
+        config = load_config()
+    return JSONResponse(config)
 
 
 __all__ = ["app"]

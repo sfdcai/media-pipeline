@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- fix(api): expose `/config` JSON snapshot for compatibility with legacy tooling
+- test: cover the new configuration snapshot endpoint
 - feat(run): add config-aware run/stop/restart helpers with PID tracking
 - feat(setup): install and enable syncthing during install/setup provisioning
 - feat(workflow): propagate batch ids through orchestrator, API, CLI, and tests
