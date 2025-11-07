@@ -39,6 +39,7 @@ def install_container(app: FastAPI, container: ServiceContainer) -> None:
     state.syncthing_api = container.syncthing_api
     state.config = container.config
     state.config_path = str(container.config_path)
+    state.workflow_settings = container.workflow_settings
     state.container = container
 
     orchestrator = WorkflowOrchestrator(container)

@@ -317,3 +317,25 @@ Scope boundaries:
 - Reuse existing log files, no external log aggregation
 Status: TODO
 Owner: Unassigned
+
+## TASK-015: Add workflow configuration presets
+Context: utils/config_loader.py, templates/control.html, docs/CONFIG.md
+Acceptance Criteria:
+- Provide saved preset toggles (e.g., copy-only, full-move) that update config values safely
+- Surface preset selection in the control UI and CLI helpers
+- Document preset behaviour and rollback steps
+Scope boundaries:
+- No persistence beyond config.yaml and in-memory state
+Status: TODO
+Owner: Product Ops AI
+
+## TASK-016: Implement batch retention policies
+Context: modules/cleanup.py, docs/CONFIG.md, tests/test_cleanup.py
+Acceptance Criteria:
+- Add configurable retention windows per batch status
+- Delete or archive aged batches automatically during cleanup
+- Cover retention logic with unit tests and document defaults
+Scope boundaries:
+- No external storage moves; operate within configured directories
+Status: TODO
+Owner: Storage AI

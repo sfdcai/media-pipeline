@@ -41,6 +41,16 @@ system:
   port_api: 8080
   port_dbui: 8081
   cleanup_empty_batches: true
+workflow:
+  debug:
+    enabled: false
+    auto_advance: false
+    step_timeout_sec: 0
+  delays:
+    syncthing_settle_sec: 5
+    post_sync_sec: 10
+  trace:
+    syncthing_samples: 25
 ```
 
 - `batch.selection_mode` controls whether batches are capped by total size
@@ -61,3 +71,12 @@ system:
 - `sorter.transfer_mode` mirrors the batch option. Choose `copy` if you want to
   retain the synced batch files after they are promoted into the sorted
   structure.
+- `workflow.debug.enabled` pauses after every module so operators can inspect
+  payloads via the control center before continuing. `auto_advance` resumes
+  automatically when paired with `step_timeout_sec`.
+- `workflow.delays.syncthing_settle_sec` waits before the first Syncthing rescan
+  so the watcher can discover the new batch on disk. `workflow.delays.post_sync_sec`
+  adds a configurable idle period after sync completes before sorting begins.
+- `workflow.trace.syncthing_samples` caps the number of Syncthing timeline
+  snapshots retained per batch. Increase the value to keep a longer history in
+  `/api/workflow/status` and the control UI timeline.

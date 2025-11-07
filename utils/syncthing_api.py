@@ -198,5 +198,13 @@ class SyncthingAPI:
             return payload
         return {}
 
+    def folder_status(self, folder: str) -> Mapping[str, Any]:
+        """Return the current folder status payload for *folder*."""
+
+        payload = self._request("GET", "/db/status", data={"folder": folder})
+        if isinstance(payload, Mapping):
+            return payload
+        return {}
+
 
 __all__ = ["SyncthingAPI", "SyncthingAPIError", "SyncthingCompletion"]

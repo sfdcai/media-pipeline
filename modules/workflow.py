@@ -52,11 +52,76 @@ class PipelineRunResult:
         }
 
 
+@dataclass(slots=True)
+class WorkflowDebugSettings:
+    """Runtime controls for interactive workflow execution."""
+
+    enabled: bool = False
+    auto_advance: bool = False
+    step_timeout_sec: float = 0.0
+
+
+@dataclass(slots=True)
+class WorkflowDebugState:
+    """Track debug progress for external observers."""
+
+    enabled: bool = False
+    waiting: bool = False
+    current_step: str | None = None
+    last_step: dict[str, Any] | None = None
+    history: list[dict[str, Any]] = field(default_factory=list)
+    note: str | None = None
+
+    def to_dict(self, *, settings: WorkflowDebugSettings) -> dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "waiting": self.waiting,
+            "current_step": self.current_step,
+            "last_step": self.last_step,
+            "history": list(self.history),
+            "note": self.note,
+            "settings": {
+                "auto_advance": settings.auto_advance,
+                "step_timeout_sec": settings.step_timeout_sec,
+            },
+        }
+
+
 class WorkflowOrchestrator:
     """Coordinate services to execute workflow steps."""
 
     def __init__(self, container: ServiceContainer) -> None:
         self._container = container
+        self._workflow_settings = container.workflow_settings
+        delays = self._workflow_settings.get("delays", {})
+        trace_settings = self._workflow_settings.get("trace", {})
+        try:
+            settle_value = float(delays.get("syncthing_settle_sec", 0) or 0)
+        except (TypeError, ValueError):
+            settle_value = 0.0
+        try:
+            post_sync_value = float(delays.get("post_sync_sec", 0) or 0)
+        except (TypeError, ValueError):
+            post_sync_value = 0.0
+        try:
+            sample_value = int(trace_settings.get("syncthing_samples", 25) or 25)
+        except (TypeError, ValueError):
+            sample_value = 25
+        poll_config = get_config_value(
+            "syncthing", "poll_interval_sec", default=10, config=container.config
+        )
+        try:
+            poll_value = float(poll_config or 10)
+        except (TypeError, ValueError):
+            poll_value = 10.0
+        self._syncthing_settle_sec = max(0.0, settle_value)
+        self._post_sync_delay_sec = max(0.0, post_sync_value)
+        self._syncthing_samples = max(1, sample_value)
+        self._syncthing_poll_interval = max(1.0, poll_value / 5.0)
+
+    @property
+    def container(self) -> ServiceContainer:
+        return self._container
 
     # ------------------------------------------------------------------
     async def run_dedup(self) -> PipelineStepResult:
@@ -101,6 +166,10 @@ class WorkflowOrchestrator:
                 message=f"Unknown batch id {batch_id}",
             )
         batch_name = batch_record["name"]
+
+        trace: list[dict[str, Any]] = []
+        trace.append(sync_service.syncthing_snapshot(phase="pre-start"))
+
         try:
             start_result = sync_service.start(batch_name)
         except (ValueError, FileNotFoundError) as exc:
@@ -122,37 +191,68 @@ class WorkflowOrchestrator:
             "batch": start_result.batch,
             "status": start_result.status,
             "started": start_result.started,
+            "syncthing_settle_sec": self._syncthing_settle_sec,
+            "post_sync_delay_sec": self._post_sync_delay_sec,
         }
-        status = "completed" if start_result.started else "skipped"
+        step_status = "completed" if start_result.started else "skipped"
         if start_result.status == BATCH_STATUS_SYNCED:
-            status = "completed"
+            step_status = "completed"
         elif start_result.status != BATCH_STATUS_SYNCED and not start_result.started:
             data["reason"] = "Batch already syncing"
 
         if start_result.started:
-            sync_status = await self._await_sync_completion(batch_name)
+            sync_status, progress_trace = await self._monitor_sync_progress(batch_name)
+            trace.extend(progress_trace)
             data["progress"] = sync_status.progress
             data["status"] = sync_status.status
             data["synced_at"] = sync_status.synced_at
             if sync_status.detail:
                 data["detail"] = sync_status.detail
+            if sync_status.syncthing:
+                data["syncthing"] = sync_status.syncthing
             if sync_status.status != BATCH_STATUS_SYNCED:
-                status = "warning"
+                step_status = "warning"
                 data["reason"] = "Sync did not reach completion"
 
-        return PipelineStepResult(name="sync", status=status, data=data)
+        data["syncthing_trace"] = trace[-self._syncthing_samples :]
+        return PipelineStepResult(name="sync", status=step_status, data=data)
 
-    async def _await_sync_completion(
-        self, batch_name: str, *, attempts: int = 10, interval: float = 3.0
-    ) -> SyncStatus:
+    async def _monitor_sync_progress(self, batch_name: str) -> tuple[SyncStatus, list[dict[str, Any]]]:
+        """Watch Syncthing progress until the batch settles."""
+
         sync_service = self._container.sync_service
+        trace: list[dict[str, Any]] = []
+
+        settle_remaining = self._syncthing_settle_sec
+        while settle_remaining > 0 and len(trace) < self._syncthing_samples:
+            trace.append(sync_service.syncthing_snapshot(phase="settle"))
+            wait_time = min(self._syncthing_poll_interval, settle_remaining)
+            await asyncio.sleep(wait_time)
+            settle_remaining -= wait_time
+
+        attempts = max(self._syncthing_samples - len(trace), 1)
         status = sync_service.status(batch_name)
-        remaining = attempts
-        while status.status != BATCH_STATUS_SYNCED and remaining > 0:
-            remaining -= 1
-            await asyncio.sleep(interval)
+
+        while attempts > 0:
+            snapshot = dict(status.syncthing or {})
+            snapshot.setdefault("status", status.status)
+            snapshot.setdefault("progress", status.progress)
+            snapshot.setdefault("synced_at", status.synced_at)
+            snapshot["timestamp"] = datetime.now(timezone.utc).isoformat()
+            trace.append(snapshot)
+
+            if status.status == BATCH_STATUS_SYNCED:
+                state_value = str(snapshot.get("state") or "").lower()
+                if not state_value or ("scan" not in state_value and state_value != "syncing"):
+                    break
+
+            attempts -= 1
+            if attempts <= 0:
+                break
+            await asyncio.sleep(self._syncthing_poll_interval)
             status = sync_service.status(batch_name)
-        return status
+
+        return status, trace[-self._syncthing_samples :]
 
     def run_sort(self, batch_id: int) -> PipelineStepResult:
         sort_service = self._container.sort_service
@@ -201,13 +301,15 @@ class WorkflowOrchestrator:
             }
         return PipelineStepResult(name="cleanup", status="completed", data=data)
 
-    async def run_pipeline(self) -> PipelineRunResult:
+    async def run_pipeline(
+        self, *, debug: "WorkflowDebugController | None" = None
+    ) -> PipelineRunResult:
         started_at = datetime.now(timezone.utc).isoformat()
         steps: list[PipelineStepResult] = []
         errors: list[str] = []
 
         dedup_result = await self.run_dedup()
-        steps.append(dedup_result)
+        await self._append_step(steps, dedup_result, debug)
         if dedup_result.status == "error" and dedup_result.message:
             errors.append(f"dedup: {dedup_result.message}")
 
@@ -238,48 +340,56 @@ class WorkflowOrchestrator:
                     batch_steps.append(retry_result)
                     batch_result = retry_result
 
-        steps.extend(batch_steps)
+        for entry in batch_steps:
+            await self._append_step(steps, entry, debug)
         batch_id = batch_result.data.get("batch_id") if batch_result.data else None
         if batch_result.status == "error" and batch_result.message:
             errors.append(f"batch: {batch_result.message}")
 
         if batch_result.status == "completed" and batch_id:
             sync_result = await self.run_sync(int(batch_id))
-            steps.append(sync_result)
+            await self._append_step(steps, sync_result, debug)
             if sync_result.status in {"error", "warning"} and sync_result.message:
                 errors.append(f"sync: {sync_result.message}")
 
             if sync_result.status == "completed":
+                await self._post_sync_delay()
                 sort_result = self.run_sort(int(batch_id))
-                steps.append(sort_result)
+                await self._append_step(steps, sort_result, debug)
                 if sort_result.status == "error" and sort_result.message:
                     errors.append(f"sort: {sort_result.message}")
             else:
-                steps.append(
+                await self._append_step(
+                    steps,
                     PipelineStepResult(
                         name="sort",
                         status="skipped",
                         message="Sorting deferred until sync completes",
-                    )
+                    ),
+                    debug,
                 )
         else:
-            steps.append(
+            await self._append_step(
+                steps,
                 PipelineStepResult(
                     name="sync",
                     status="skipped",
                     message="No batch created",
-                )
+                ),
+                debug,
             )
-            steps.append(
+            await self._append_step(
+                steps,
                 PipelineStepResult(
                     name="sort",
                     status="skipped",
                     message="No batch created",
-                )
+                ),
+                debug,
             )
 
         cleanup_result = self.run_cleanup()
-        steps.append(cleanup_result)
+        await self._append_step(steps, cleanup_result, debug)
 
         finished_at = datetime.now(timezone.utc).isoformat()
         return PipelineRunResult(
@@ -294,6 +404,21 @@ class WorkflowOrchestrator:
         """Poll Syncthing for batches marked as syncing and update progress."""
 
         return self._container.sync_service.refresh_syncing_batches()
+
+    async def _append_step(
+        self,
+        accumulator: list[PipelineStepResult],
+        result: PipelineStepResult,
+        debug: "WorkflowDebugController | None",
+    ) -> None:
+        accumulator.append(result)
+        if debug is not None:
+            await debug.after_step(result)
+
+    async def _post_sync_delay(self) -> None:
+        delay = self._post_sync_delay_sec
+        if delay > 0:
+            await asyncio.sleep(delay)
 
     # ------------------------------------------------------------------
     def build_overview(
@@ -387,6 +512,10 @@ class WorkflowManager:
         self._current_task: asyncio.Task[PipelineRunResult] | None = None
         self._last_result: PipelineRunResult | None = None
         self._last_error: str | None = None
+        self._debug_state = WorkflowDebugState()
+        self._debug_settings = WorkflowDebugSettings()
+        self._debug_event = asyncio.Event()
+        self._debug_event.set()
 
     @property
     def orchestrator(self) -> WorkflowOrchestrator:
@@ -396,13 +525,16 @@ class WorkflowManager:
         async with self._lock:
             if self._current_task and not self._current_task.done():
                 return False
+            settings = self._derive_debug_settings()
+            self._prepare_debug(settings)
             loop = asyncio.get_running_loop()
-            self._current_task = loop.create_task(self._run())
+            self._current_task = loop.create_task(self._run(settings))
             return True
 
-    async def _run(self) -> PipelineRunResult:
+    async def _run(self, settings: WorkflowDebugSettings) -> PipelineRunResult:
+        controller = WorkflowDebugController(self, settings)
         try:
-            result = await self._orchestrator.run_pipeline()
+            result = await self._orchestrator.run_pipeline(debug=controller)
             self._last_result = result
             self._last_error = None
             return result
@@ -413,6 +545,9 @@ class WorkflowManager:
         finally:
             async with self._lock:
                 self._current_task = None
+                self._debug_state.waiting = False
+                self._debug_state.current_step = None
+                self._debug_event.set()
 
     def status(self) -> dict[str, Any]:
         running = bool(self._current_task and not self._current_task.done())
@@ -420,12 +555,101 @@ class WorkflowManager:
             "running": running,
             "last_result": self._last_result.to_dict() if self._last_result else None,
             "error": self._last_error,
+            "debug": self.debug_state(),
         }
 
     def overview(self) -> dict[str, Any]:
         running = bool(self._current_task and not self._current_task.done())
         return self._orchestrator.build_overview(
             last_run=self._last_result, running=running
+        )
+
+    def debug_state(self) -> dict[str, Any]:
+        return self._debug_state.to_dict(settings=self._debug_settings)
+
+    def advance_debug(self) -> dict[str, Any]:
+        self._debug_state.note = "Manual continue requested"
+        self._debug_event.set()
+        return self.debug_state()
+
+    def _prepare_debug(self, settings: WorkflowDebugSettings) -> None:
+        self._debug_settings = settings
+        state = self._debug_state
+        state.enabled = settings.enabled
+        state.waiting = False
+        state.current_step = None
+        state.last_step = None
+        state.note = None
+        state.history.clear()
+        self._debug_event.set()
+
+    def _derive_debug_settings(self) -> WorkflowDebugSettings:
+        mapping = getattr(self._orchestrator.container, "workflow_settings", {})
+        debug_map = mapping.get("debug", {}) if isinstance(mapping, dict) else {}
+        enabled = bool(debug_map.get("enabled"))
+        auto = bool(debug_map.get("auto_advance"))
+        try:
+            timeout = float(debug_map.get("step_timeout_sec", 0) or 0)
+        except (TypeError, ValueError):
+            timeout = 0.0
+        return WorkflowDebugSettings(
+            enabled=enabled,
+            auto_advance=auto,
+            step_timeout_sec=max(0.0, timeout),
+        )
+
+    def _register_step_result(self, result: PipelineStepResult) -> None:
+        entry = {
+            "name": result.name,
+            "status": result.status,
+            "message": result.message,
+            "data": result.data,
+        }
+        self._debug_state.last_step = entry
+        history = self._debug_state.history
+        history.append(entry)
+        max_items = 25
+        if len(history) > max_items:
+            del history[:-max_items]
+
+    async def _await_debug_confirmation(self, step_name: str, timeout: float | None) -> None:
+        if not self._debug_settings.enabled or self._debug_settings.auto_advance:
+            return
+        self._debug_state.waiting = True
+        self._debug_state.current_step = step_name
+        self._debug_event.clear()
+        try:
+            if timeout and timeout > 0:
+                await asyncio.wait_for(self._debug_event.wait(), timeout)
+                self._debug_state.note = None
+            else:
+                await self._debug_event.wait()
+                self._debug_state.note = None
+        except asyncio.TimeoutError:
+            self._debug_state.note = f"Step '{step_name}' auto-continued after timeout"
+        finally:
+            self._debug_state.waiting = False
+            self._debug_state.current_step = None
+            self._debug_event.set()
+
+
+class WorkflowDebugController:
+    """Bridge orchestrator step callbacks with debug state management."""
+
+    def __init__(self, manager: WorkflowManager, settings: WorkflowDebugSettings) -> None:
+        self._manager = manager
+        self._settings = settings
+
+    async def after_step(self, result: PipelineStepResult) -> None:
+        self._manager._register_step_result(result)
+        if not self._settings.enabled:
+            return
+        if self._settings.auto_advance:
+            return
+        timeout = self._settings.step_timeout_sec
+        await self._manager._await_debug_confirmation(
+            result.name,
+            timeout if timeout and timeout > 0 else None,
         )
 
 

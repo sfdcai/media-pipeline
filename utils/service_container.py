@@ -24,6 +24,7 @@ class ServiceContainer:
     config: dict[str, Any]
     config_path: Path
     database: DatabaseManager
+    workflow_settings: dict[str, Any]
     dedup_service: DedupService
     batch_service: BatchService
     sync_service: SyncService
@@ -117,6 +118,61 @@ def build_service_container(
         "syncthing", "rescan_delay_sec", default=3, config=config_data
     )
 
+    workflow_settings = {
+        "debug": {
+            "enabled": bool(
+                get_config_value(
+                    "workflow", "debug", "enabled", default=False, config=config_data
+                )
+            ),
+            "auto_advance": bool(
+                get_config_value(
+                    "workflow", "debug", "auto_advance", default=False, config=config_data
+                )
+            ),
+            "step_timeout_sec": float(
+                get_config_value(
+                    "workflow",
+                    "debug",
+                    "step_timeout_sec",
+                    default=0,
+                    config=config_data,
+                )
+                or 0
+            ),
+        },
+        "delays": {
+            "syncthing_settle_sec": float(
+                get_config_value(
+                    "workflow",
+                    "delays",
+                    "syncthing_settle_sec",
+                    default=5,
+                    config=config_data,
+                )
+                or 0
+            ),
+            "post_sync_sec": float(
+                get_config_value(
+                    "workflow", "delays", "post_sync_sec", default=10, config=config_data
+                )
+                or 0
+            ),
+        },
+        "trace": {
+            "syncthing_samples": int(
+                get_config_value(
+                    "workflow",
+                    "trace",
+                    "syncthing_samples",
+                    default=25,
+                    config=config_data,
+                )
+                or 0
+            ),
+        },
+    }
+
     database = DatabaseManager(db_path)
     dedup_service = DedupService(
         database,
@@ -173,6 +229,7 @@ def build_service_container(
         config=config_data,
         config_path=resolved_path,
         database=database,
+        workflow_settings=workflow_settings,
         dedup_service=dedup_service,
         batch_service=batch_service,
         sync_service=sync_service,

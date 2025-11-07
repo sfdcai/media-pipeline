@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- feat(workflow): add interactive debug gating with manual advance endpoint and step history snapshots
+- feat(sync): capture Syncthing trace timelines and surface them via workflow status, sync responses, and control UI
+- feat(ui): refresh /control with flowchart view, debug controls, and Syncthing timeline visualisation
+- docs: describe debug mode, timeline controls, and recommendations in README/API/CONFIG
 - feat(sync): add configurable Syncthing rescan delay so uploads settle before rescans fire
 - feat(batch/sort): support copy-or-move transfer modes and archive retained source files when copying
 - test: cover transfer-mode copy flows and the Syncthing rescan delay helper

@@ -43,3 +43,14 @@ system:
   port_dbui: 8081
   max_parallel_fs_ops: 4
   cleanup_empty_batches: true
+
+workflow:
+  debug:
+    enabled: false
+    auto_advance: false
+    step_timeout_sec: 0
+  delays:
+    syncthing_settle_sec: 5
+    post_sync_sec: 10
+  trace:
+    syncthing_samples: 25

@@ -8,6 +8,7 @@ import pytest
 from api.workflow_router import (
     run_workflow,
     workflow_overview,
+    workflow_debug_advance,
     workflow_sort,
     workflow_status,
     workflow_sync,
@@ -86,6 +87,9 @@ class StubSyncService:
                 "detail": None,
             }
         ]
+
+    def syncthing_snapshot(self, *, phase: str | None = None) -> dict[str, Any]:
+        return {"timestamp": "now", "phase": phase}
 
 
 class StubSortService:
@@ -212,6 +216,11 @@ def build_stub_orchestrator() -> WorkflowOrchestrator:
         sync_service=StubSyncService(),
         sort_service=StubSortService(),
         cleanup_service=StubCleanupService(),
+        workflow_settings={
+            "debug": {"enabled": False, "auto_advance": False, "step_timeout_sec": 0},
+            "delays": {"syncthing_settle_sec": 0, "post_sync_sec": 0},
+            "trace": {"syncthing_samples": 5},
+        },
     )
     return WorkflowOrchestrator(container)  # type: ignore[arg-type]
 
@@ -256,6 +265,11 @@ async def test_workflow_retries_batch_after_sorting_blocking_synced_batch():
         sync_service=StubSyncService(),
         sort_service=sort_service,
         cleanup_service=StubCleanupService(),
+        workflow_settings={
+            "debug": {"enabled": False, "auto_advance": False, "step_timeout_sec": 0},
+            "delays": {"syncthing_settle_sec": 0, "post_sync_sec": 0},
+            "trace": {"syncthing_samples": 5},
+        },
     )
     orchestrator = WorkflowOrchestrator(container)  # type: ignore[arg-type]
 
@@ -276,7 +290,20 @@ class FakeManager:
         return True
 
     def status(self) -> dict[str, object]:
-        return {"running": False, "last_result": None, "error": None}
+        return {
+            "running": False,
+            "last_result": None,
+            "error": None,
+            "debug": {
+                "enabled": False,
+                "waiting": False,
+                "current_step": None,
+                "last_step": None,
+                "history": [],
+                "note": None,
+                "settings": {"auto_advance": False, "step_timeout_sec": 0},
+            },
+        }
 
     def overview(self) -> dict[str, object]:
         return {
@@ -300,6 +327,9 @@ class FakeManager:
     def orchestrator(self) -> WorkflowOrchestrator:
         return self._manager.orchestrator
 
+    def advance_debug(self) -> dict[str, object]:
+        return self.status()["debug"]
+
 
 @pytest.mark.anyio
 async def test_workflow_router_endpoints():
@@ -321,4 +351,29 @@ async def test_workflow_router_endpoints():
 
     refresh_payload = await workflow_sync_refresh(fake_manager)
     assert "batches" in refresh_payload
+
+    debug_payload = await workflow_debug_advance(fake_manager)
+    assert debug_payload["enabled"] is False
+
+
+@pytest.mark.anyio
+async def test_workflow_manager_debug_waits_for_confirmation():
+    orchestrator = build_stub_orchestrator()
+    orchestrator.container.workflow_settings["debug"]["enabled"] = True  # type: ignore[attr-defined]
+    manager = WorkflowManager(orchestrator)
+
+    started = await manager.trigger()
+    assert started is True
+
+    # Step through each confirmation
+    while manager._current_task and not manager._current_task.done():  # type: ignore[attr-defined]
+        state = manager.status()["debug"]
+        if state.get("waiting"):
+            manager.advance_debug()
+        await asyncio.sleep(0.05)
+
+    assert manager._last_result is not None  # type: ignore[attr-defined]
+    debug_state = manager.debug_state()
+    assert debug_state["history"]
+    assert debug_state["waiting"] is False
 

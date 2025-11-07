@@ -71,6 +71,20 @@ def _load_default_config() -> Dict[str, Any]:
             "max_parallel_fs_ops": 4,
             "cleanup_empty_batches": True,
         },
+        "workflow": {
+            "debug": {
+                "enabled": False,
+                "auto_advance": False,
+                "step_timeout_sec": 0,
+            },
+            "delays": {
+                "syncthing_settle_sec": 5,
+                "post_sync_sec": 10,
+            },
+            "trace": {
+                "syncthing_samples": 25,
+            },
+        },
     }
 
 

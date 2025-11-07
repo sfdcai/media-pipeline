@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from utils.db_manager import DatabaseManager
 from utils.syncthing_api import SyncthingAPI, SyncthingAPIError
@@ -37,6 +37,7 @@ class SyncStatus:
     progress: float
     synced_at: Optional[str]
     detail: Optional[str] = None
+    syncthing: Optional[dict[str, Any]] = None
 
 
 @dataclass(slots=True)
@@ -48,6 +49,8 @@ class SyncDiagnostics:
     device_id: Optional[str]
     last_error: Optional[str]
     syncthing_status: dict[str, Any]
+    folder_status: Optional[dict[str, Any]] = None
+    completion: Optional[float] = None
 
 
 class SyncService:
@@ -75,6 +78,47 @@ class SyncService:
         except (TypeError, ValueError):
             delay_value = 0.0
         self._rescan_delay = max(0.0, delay_value)
+
+    # ------------------------------------------------------------------
+    def folder_status(self) -> Optional[dict[str, Any]]:
+        """Return the latest folder status payload from Syncthing."""
+
+        if not self._folder_id:
+            return None
+        try:
+            payload = self._syncthing.folder_status(self._folder_id)
+        except SyncthingAPIError as exc:
+            self._last_error = str(exc)
+            return {"error": str(exc)}
+
+        return self._normalise_folder_status(payload)
+
+    def syncthing_snapshot(self, *, phase: str | None = None) -> dict[str, Any]:
+        """Capture a timestamped snapshot of the Syncthing folder state."""
+
+        snapshot = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "folder": self._folder_id,
+        }
+        if phase:
+            snapshot["phase"] = phase
+
+        folder_status = self.folder_status()
+        if folder_status:
+            snapshot.update(folder_status)
+
+        if self._folder_id:
+            try:
+                completion = self._syncthing.folder_completion(
+                    self._folder_id,
+                    device=self._device_id,
+                )
+                snapshot["completion"] = completion.completion
+            except SyncthingAPIError as exc:
+                snapshot["error"] = str(exc)
+                self._last_error = str(exc)
+
+        return snapshot
 
     # ------------------------------------------------------------------
     def start(self, batch_name: str) -> SyncStartResult:
@@ -158,6 +202,14 @@ class SyncService:
             progress = 0.0
             detail = str(exc)
 
+        folder_status = self.folder_status()
+        if folder_status is not None:
+            folder_status = dict(folder_status)
+            folder_status.setdefault("completion", progress)
+            folder_status.setdefault("status", status)
+            folder_status.setdefault("synced_at", synced_at)
+            folder_status.setdefault("batch", batch_name)
+
         if progress >= 100.0:
             synced_at = self._mark_batch_synced(batch_name, record["id"])
             status = BATCH_STATUS_SYNCED
@@ -169,6 +221,7 @@ class SyncService:
             progress=progress,
             synced_at=synced_at,
             detail=detail,
+            syncthing=folder_status,
         )
 
     # ------------------------------------------------------------------
@@ -180,12 +233,28 @@ class SyncService:
         except SyncthingAPIError as exc:  # pragma: no cover - network failures
             status_payload = {"error": str(exc)}
 
+        folder_status = self.folder_status()
+        completion_value: float | None = None
+        if self._folder_id:
+            try:
+                completion = self._syncthing.folder_completion(
+                    self._folder_id,
+                    device=self._device_id,
+                )
+                completion_value = completion.completion
+            except SyncthingAPIError as exc:  # pragma: no cover - network failures
+                if folder_status is None:
+                    folder_status = {"error": str(exc)}
+                self._last_error = str(exc)
+
         return SyncDiagnostics(
             batch_dir=str(self._batch_dir),
             folder_id=self._folder_id,
             device_id=self._device_id,
             last_error=self._last_error,
             syncthing_status=status_payload,
+            folder_status=folder_status,
+            completion=completion_value,
         )
 
     def refresh_syncing_batches(self) -> list[dict[str, Any]]:
@@ -212,6 +281,7 @@ class SyncService:
                     "progress": status.progress,
                     "synced_at": status.synced_at,
                     "detail": status.detail,
+                    "syncthing": status.syncthing,
                 }
             )
 
@@ -257,6 +327,26 @@ class SyncService:
                 (FILE_STATUS_SYNCED, batch_id, FILE_STATUS_BATCHED, FILE_STATUS_SYNCED),
             ).close()
         return timestamp
+
+    def _normalise_folder_status(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Convert Syncthing's folder status payload into friendly keys."""
+
+        mapping = {
+            "state": payload.get("state"),
+            "need_bytes": payload.get("needBytes"),
+            "need_items": payload.get("needItems"),
+            "in_sync_bytes": payload.get("inSyncBytes"),
+            "in_sync_files": payload.get("inSyncFiles"),
+            "global_bytes": payload.get("globalBytes"),
+            "global_items": payload.get("globalItems"),
+            "sequence": payload.get("sequence"),
+            "last_scan": payload.get("lastScan"),
+            "invalid": payload.get("invalid"),
+            "pull_errors": payload.get("pullErrors"),
+        }
+        if "error" in payload:
+            mapping["error"] = payload.get("error")
+        return mapping
 
 
 __all__ = [

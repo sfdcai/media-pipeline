@@ -14,6 +14,7 @@ Base URL: `http://<host>:8080`
 - GET  /api/sort/status/{batch_id}
 - POST /api/workflow/run
 - GET  /api/workflow/status
+- POST /api/workflow/debug/advance
 - GET  /api/workflow/overview
 - POST /api/workflow/sync/{batch_id}
 - POST /api/workflow/sync/refresh
@@ -48,12 +49,37 @@ successfully.
 
 Launch the full dedup → batch → sync → sort pipeline as a background task.
 Returns `{ "started": true }` when the workflow begins or `{ "started": false }`
-if a previous run is still in progress.
+if a previous run is still in progress. When `workflow.debug.enabled` is true the
+runner pauses after every step until `/api/workflow/debug/advance` is called (or
+the optional timeout elapses).
 
 ### GET /api/workflow/status
 
 Summarises the state of the asynchronous workflow runner, including whether it
-is currently processing and the most recent run summary (if available).
+is currently processing and the most recent run summary (if available). The
+payload also exposes the interactive debug state under the `debug` key:
+
+```json
+"debug": {
+  "enabled": true,
+  "waiting": true,
+  "current_step": "batch",
+  "last_step": {"name": "dedup", "status": "completed", ...},
+  "history": [... up to 25 entries ...],
+  "note": null,
+  "settings": {"auto_advance": false, "step_timeout_sec": 0.0}
+}
+```
+
+Each `steps[].data` block in `last_result` may include `syncthing_trace`, an
+array of timestamped snapshots collected from Syncthing while the batch was
+syncing. These snapshots mirror the timeline shown in the control UI.
+
+### POST /api/workflow/debug/advance
+
+Manually continue a paused workflow step when debug mode is enabled. The
+response mirrors `GET /api/workflow/status`'s `debug` block so UI clients can
+update their state without issuing another request.
 
 ### GET /api/workflow/overview
 
@@ -68,7 +94,9 @@ additional API calls.
 
 Start a Syncthing sync cycle for the batch (identified by its numeric `batch_id`) and poll completion briefly. Returns
 step metadata (`status`, `progress`, `synced_at`, etc.). Skips work when the
-batch is already syncing or has reached `SYNCED`. Responses include both the id and the human-readable batch name for clarity.
+batch is already syncing or has reached `SYNCED`. Responses include both the id
+and the human-readable batch name, the configured settle/post-sync delays, and a
+`syncthing_trace` list representing the captured timeline snapshots.
 
 ### POST /api/workflow/sync/refresh
 
@@ -110,9 +138,11 @@ to the sync monitor.
 
 Exposes the currently configured batch directory, Syncthing folder/device IDs,
 the last error recorded by the sync monitor, and the raw payload returned by
-`/rest/system/status`. The control center uses this endpoint to populate the
-Syncthing diagnostics panel; operators can call it directly when verifying API
-credentials or network reachability.
+`/rest/system/status`. When a folder id is configured the response also includes
+`folder_status`, `completion`, and the most recent error surfaced while polling.
+The control center uses this endpoint to populate the Syncthing diagnostics panel
+and timeline; operators can call it directly when verifying API credentials or
+network reachability.
 
 ## Sort
 

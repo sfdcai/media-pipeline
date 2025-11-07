@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Any
 import sys
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -56,6 +58,14 @@ class StubSyncthingAPI:
         self.completion_requests: list[tuple[str, str | None]] = []
         self.raise_completion: SyncthingAPIError | None = None
         self.status_payload: dict[str, Any] = {"myID": "DEVICE", "state": "idle"}
+        self.folder_status_payload: dict[str, Any] = {
+            "state": "idle",
+            "needBytes": 0,
+            "needItems": 0,
+            "inSyncBytes": 0,
+            "inSyncFiles": 0,
+            "lastScan": "2024-01-01T00:00:00Z",
+        }
 
     def trigger_rescan(
         self,
@@ -76,6 +86,11 @@ class StubSyncthingAPI:
 
     def system_status(self) -> dict[str, Any]:
         return self.status_payload
+
+    def folder_status(self, folder: str) -> dict[str, Any]:
+        payload = dict(self.folder_status_payload)
+        payload["folder"] = folder
+        return payload
 
 
 def test_sync_service_transitions_status(tmp_path: Path) -> None:
@@ -145,8 +160,10 @@ def test_sync_service_respects_folder_id(tmp_path: Path) -> None:
     service.start(batch_name)
 
     assert api.scans == [("media-folder", [batch_name], None)]
-    service.status(batch_name)
+    status = service.status(batch_name)
     assert api.completion_requests[-1] == ("media-folder", None)
+    assert status.syncthing is not None
+    assert status.syncthing.get("state") == "idle"
 
     db.close()
 
@@ -185,8 +202,9 @@ def test_sync_service_uses_device_id(tmp_path: Path) -> None:
         rescan_delay=0,
     )
 
-    service.status(batch_name)
+    status = service.status(batch_name)
     assert api.completion_requests[-1] == ("folder-a", "DEVICE42")
+    assert status.syncthing is not None
 
 
 def test_sync_service_reports_detail_on_error(tmp_path: Path) -> None:
@@ -246,6 +264,9 @@ def test_sync_diagnostics_include_last_error(tmp_path: Path) -> None:
     assert diagnostics.device_id == "device-a"
     assert diagnostics.last_error == "Syncthing request failed (403 Forbidden)"
     assert diagnostics.syncthing_status == api.status_payload
+    assert diagnostics.folder_status is not None
+    assert diagnostics.folder_status.get("state") == "idle"
+    assert diagnostics.completion == pytest.approx(api.completion)
 
 
 def test_refresh_syncing_batches_marks_completion(tmp_path: Path) -> None:

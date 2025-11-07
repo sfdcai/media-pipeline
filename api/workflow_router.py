@@ -30,6 +30,13 @@ async def workflow_status(manager: WorkflowManager = Depends(get_manager)) -> di
     return manager.status()
 
 
+@router.post("/debug/advance", response_model=dict)
+async def workflow_debug_advance(
+    manager: WorkflowManager = Depends(get_manager),
+) -> dict:
+    return manager.advance_debug()
+
+
 @router.get("/overview", response_model=dict)
 async def workflow_overview(manager: WorkflowManager = Depends(get_manager)) -> dict:
     return manager.overview()
@@ -71,6 +78,7 @@ __all__ = [
     "router",
     "run_workflow",
     "workflow_status",
+    "workflow_debug_advance",
     "workflow_overview",
     "workflow_sync",
     "workflow_sort",

@@ -9,7 +9,9 @@ Media Pipeline is a FastAPI-based automation service that synchronizes, sorts, a
 - **Centralized Configuration** – A single config snapshot powers the API, CLI, and UI; updates through `/api/config` hot-reload the service container without restarts.
 - **Syncthing Integration** – Triggers rescans, monitors completion, and feeds events into the SQLite journal for traceability.
 - **EXIF Sorting & Cleanup** – Groups media into date-based folders and removes stale batches or orphaned files.
-- **Operational Dashboard & Control Center** – HTMX dashboard plus a lightweight control UI for editing config, launching runs, reviewing workflow history, and visualizing live progress with charts, progress bars, and headline metrics.
+- **Operational Dashboard & Control Center** – HTMX dashboard plus a lightweight control UI for editing config, launching runs, reviewing workflow history, and visualizing live progress with charts, progress bars, timeline cards, and headline metrics.
+- **Interactive Workflow Debugger** – Optional step-by-step gating pauses the pipeline after each module until you confirm the next action, complete with live payload dumps and timeout safeguards.
+- **Syncthing Trace Timeline** – Captures successive REST snapshots for every sync, including folder/device state, progress, and diagnostics surfaced in both the API and control UI.
 
 ## Architecture Overview
 
@@ -100,7 +102,10 @@ Navigate to `http://<host>:8080/control` to open the new operations console. The
 - Inspect and edit `config.yaml` in-place with validation feedback.
 - Trigger the full workflow or individual modules (dedup, batch, sync, sort, cleanup).
 - Select the target batch by ID for sync/sort actions and review the last five batches at a glance.
+- Follow the **Workflow Flowchart** card to see each step's latest status, timestamps, and payload excerpt as the pipeline advances.
 - Track the *Active Sync Progress* panel to see every batch still marked as `SYNCING`, complete with progress bars and the most recent Syncthing detail message.
+- Browse the **Syncthing Timeline** to review captured REST snapshots (state, progress, completion, device health) for the batch under sync.
+- Use the Debug card to pause after each module, review the JSON payload, and manually continue with the **Advance Step** button when `workflow.debug.enabled` is true.
 - Fire the **Refresh Sync Progress** button to poll Syncthing on-demand whenever batches appear stuck.
 - Monitor dedup status, aggregated file counts, and the results of the most recent workflow run without refreshing.
 - Jump straight to the `/dashboard` view for sparkline charts, progress bars, storage usage, and recent batch summaries.
@@ -120,6 +125,35 @@ Operators who prefer the terminal can launch the interactive helper:
 ```
 
 The menu mirrors the control center functionality—run the full pipeline, trigger individual modules, or view an overview without issuing raw HTTP requests. Results are printed step-by-step with structured JSON payloads.
+
+### Workflow Debug Mode
+
+Interactive debugging is enabled entirely via configuration. Toggle the following keys in `config.yaml` (or `PUT /api/config`) to pause after every step:
+
+```yaml
+workflow:
+  debug:
+    enabled: true         # Pause after each module and wait for operator confirmation
+    auto_advance: false   # Set true to continue automatically when the timeout elapses
+    step_timeout_sec: 0   # Optional auto-continue timeout (0 = wait indefinitely)
+```
+
+When debug mode is active the orchestrator records each step payload, exposes it through `/api/workflow/status`, and waits for `/api/workflow/debug/advance` before continuing. The control center surfaces the same payloads in the **Workflow Flowchart** and enables an **Advance Step** button so operators can review output in context before proceeding.
+
+### Syncthing Trace Timeline
+
+The orchestrator captures REST snapshots from Syncthing while a batch is syncing. Adjust cadence and retention under `workflow.delays` and `workflow.trace`:
+
+```yaml
+workflow:
+  delays:
+    syncthing_settle_sec: 5  # Wait before the initial rescan so Syncthing notices fresh files
+    post_sync_sec: 10         # Idle time after sync completes before sorting begins
+  trace:
+    syncthing_samples: 25     # Maximum snapshots retained per batch
+```
+
+Snapshots contain status, progress, completion timestamps, device IDs, and error messages. They appear in `/api/workflow/status`, `/api/workflow/sync/{batch_id}`, `/api/sync/diagnostics`, and the control center timeline so you can audit sync behaviour even when the Syncthing GUI is inaccessible.
 
 ## Operating the Pipeline
 
@@ -182,6 +216,8 @@ curl -X POST http://<host>:8080/api/cleanup/run
 
 Tip: while developing locally you can call these endpoints with the provided `./scripts/debug.sh` to confirm the database schema, log locations, and HTTP health probe responses.
 
+For complex investigations, enable workflow debug mode and step through each module from the control center. Combine the flowchart payloads with the Syncthing timeline to ensure the remote peer has detected new files before sorting proceeds.
+
 ### Syncthing accessibility tweaks
 
 If you need to reapply the Syncthing listener changes (for example after a manual edit of `config.xml`) run:
@@ -208,15 +244,17 @@ Key batch-related settings:
 
 Refer to [`docs/CONFIG.md`](docs/CONFIG.md) for the full schema and guidance on overriding paths, deduplication settings, Syncthing credentials, and dashboard options.
 
-## Enhancement Opportunities
+## Recommendations
 
-We are actively tracking the next improvements for the pipeline:
+Based on recent field feedback, we recommend the following next steps to continue hardening the platform:
 
-- **Systemd hardening:** ship dedicated unit files for the API and sqlite-web processes (socket activation, restart policies, log forwarding).
-- **Observability:** emit Prometheus metrics and structured traces so that sync throughput and error rates can be graphed over time.
-- **Live log streaming:** surface tail-follow views in the control center to monitor API and worker output in real time.
+- **Systemd hardening:** ship dedicated unit files for the API and sqlite-web processes (socket activation, restart policies, journal forwarding) so production hosts survive crashes cleanly.
+- **Observability & alerting:** publish Prometheus metrics for batch throughput, Syncthing latency, and error counts, and wire them into alert rules so operators know when automation stalls.
+- **Live log streaming:** embed tail-follow panes for API and worker logs inside the control center to avoid SSHing into appliances for troubleshooting.
+- **Workflow presets:** add saved configuration profiles (for example "copy-only dry run" versus "full move pipeline") so operators can pivot without editing YAML by hand.
+- **Batch retention policies:** expose per-status retention windows to reclaim staging storage automatically once downstream systems ingest the sorted media.
 
-See [`prompts/TASKS.md`](prompts/TASKS.md) for the detailed task breakdown and status.
+See [`prompts/TASKS.md`](prompts/TASKS.md) for active roadmap items and implementation status.
 
 ## Debugging
 
