@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+- chore(config): add repository default config template and load-time fallback
+- chore(install): bootstrap config and database using shared helper script
+- chore(setup): reuse default template and schema helper during manual installs
+- feat(scripts): add CLI to initialize the SQLite database schema
+- fix(scripts): harden run.sh environment detection and module import path
+- docs: expand README with pipeline operations, module-by-module workflows, and enhancement roadmap
+- docs: capture upcoming work in prompts/TASKS.md
+- feat(workflow): centralize service wiring, add async workflow manager, and expose overview endpoints
+- feat(cli): ship menu-driven scripts/workflow.py helper with config override support
+- feat(ui): introduce /control operations console with config editor and module triggers
+- docs: document new workflow endpoints and interactive controls in README/API
+- test: cover orchestrator pipeline logic and workflow API surface
+
 ## v0.1.0 (scaffold)
 - Repository structure
 - Docs
