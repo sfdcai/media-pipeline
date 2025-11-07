@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 import asyncio
 import json
 import sys
 from pathlib import Path
 
 import yaml
+from starlette.requests import Request
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -91,3 +90,28 @@ def test_update_config_merges_and_logs(tmp_path: Path, monkeypatch) -> None:
     assert len(rows_after) == 2
 
     database.close()
+
+
+def test_configuration_snapshot_uses_application_state() -> None:
+    if "main" in sys.modules:
+        del sys.modules["main"]
+
+    import main as main_module
+
+    custom_config = {
+        "paths": {"source_dir": "/tmp/testing"},
+        "system": {"port_api": 1234},
+    }
+    original_config = getattr(main_module.app.state, "config", None)
+    main_module.app.state.config = custom_config
+
+    request = Request({"type": "http", "app": main_module.app})
+    response = asyncio.run(main_module.configuration_snapshot(request))
+    payload = json.loads(response.body.decode("utf-8"))
+
+    assert payload == custom_config
+
+    if original_config is not None:
+        main_module.app.state.config = original_config
+    main_module.app.state.db.close()
+    del sys.modules["main"]

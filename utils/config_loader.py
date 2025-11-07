@@ -5,52 +5,69 @@ from __future__ import annotations
 import os
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, MutableMapping
+from typing import Any, Dict, MutableMapping, cast
 
 import yaml
 
 DEFAULT_CONFIG_PATH = Path("/etc/media-pipeline/config.yaml")
-DEFAULT_CONFIG: Dict[str, Any] = {
-    "paths": {
-        "source_dir": str(Path("/var/lib/media-pipeline/source")),
-        "duplicates_dir": str(Path("/var/lib/media-pipeline/duplicates")),
-        "batch_dir": str(Path("/var/lib/media-pipeline/batches")),
-        "sorted_dir": str(Path("/var/lib/media-pipeline/sorted")),
-        "temp_dir": str(Path("/var/lib/media-pipeline/temp")),
-    },
-    "batch": {
-        "max_size_gb": 15,
-        "naming_pattern": "batch_{index:03d}",
-    },
-    "dedup": {
-        "hash_algorithm": "sha256",
-        "threads": 2,
-        "move_duplicates": False,
-    },
-    "syncthing": {
-        "api_url": "http://127.0.0.1:8384/rest",
-        "api_key": "",
-        "folder_id": "",
-        "poll_interval_sec": 60,
-        "auto_sort_after_sync": True,
-    },
-    "sorter": {
-        "folder_pattern": "{year}/{month:02d}/{day:02d}",
-        "exif_fallback": True,
-    },
-    "auth": {
-        "api_key": "",
-        "header_name": "x-api-key",
-    },
-    "system": {
-        "db_path": str(Path("/var/lib/media-pipeline/db.sqlite")),
-        "log_dir": str(Path("/var/log/media-pipeline")),
-        "port_api": 8080,
-        "port_dbui": 8081,
-        "max_parallel_fs_ops": 4,
-        "cleanup_empty_batches": True,
-    },
-}
+DEFAULT_CONFIG_FILE = Path(__file__).resolve().parent.parent / "config" / "default_config.yaml"
+
+
+def _load_default_config() -> Dict[str, Any]:
+    """Read the repository default configuration YAML."""
+
+    if DEFAULT_CONFIG_FILE.exists():
+        with DEFAULT_CONFIG_FILE.open("r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+        if isinstance(data, dict):
+            return cast(Dict[str, Any], data)
+        raise ValueError("Default configuration file must contain a mapping at the top level")
+
+    # Fallback values mirror the documented defaults.
+    return {
+        "paths": {
+            "source_dir": str(Path("/mnt/nas/photos_raw")),
+            "duplicates_dir": str(Path("/mnt/nas/duplicates")),
+            "batch_dir": str(Path("/mnt/nas/syncthing/upload")),
+            "sorted_dir": str(Path("/mnt/nas/photos_sorted")),
+            "temp_dir": str(Path("/opt/media-pipeline/data/temp")),
+        },
+        "batch": {
+            "max_size_gb": 15,
+            "naming_pattern": "batch_{index:03d}",
+        },
+        "dedup": {
+            "hash_algorithm": "sha256",
+            "threads": 4,
+            "move_duplicates": True,
+        },
+        "syncthing": {
+            "api_url": "http://127.0.0.1:8384/rest",
+            "api_key": "",
+            "folder_id": "",
+            "poll_interval_sec": 60,
+            "auto_sort_after_sync": True,
+        },
+        "sorter": {
+            "folder_pattern": "{year}/{month:02d}/{day:02d}",
+            "exif_fallback": True,
+        },
+        "auth": {
+            "api_key": "",
+            "header_name": "x-api-key",
+        },
+        "system": {
+            "db_path": str(Path("/var/lib/media-pipeline/db.sqlite")),
+            "log_dir": str(Path("/var/log/media-pipeline")),
+            "port_api": 8080,
+            "port_dbui": 8081,
+            "max_parallel_fs_ops": 4,
+            "cleanup_empty_batches": True,
+        },
+    }
+
+
+DEFAULT_CONFIG: Dict[str, Any] = _load_default_config()
 
 
 def _deep_merge(

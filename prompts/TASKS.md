@@ -259,7 +259,7 @@ Acceptance:
 
 ## TASK-009: Implement Auth middleware (API key)
 Status: ✅ Added configurable API-key middleware with optional exemptions.
-Context: docs/SECURITY.md  
+Context: docs/SECURITY.md
 Acceptance:
 - Optional token from .env or config
 - Deny unauthenticated requests if enabled
@@ -267,3 +267,53 @@ Acceptance:
 
 
 ... add more tasks as needed.
+## TASK-010: Harden long-running services
+Context: scripts/run.sh, scripts/setup.sh, docs/OPERATIONS.md
+Acceptance Criteria:
+- Provide dedicated systemd units for API and sqlite-web with restart/backoff policies
+- Document journalctl troubleshooting steps
+Scope boundaries:
+- No containerization or supervisor replacement
+Status: DOING — Added PID-aware run/stop/restart helpers and Syncthing enablement; systemd unit hardening still pending.
+Owner: Platform Ops AI
+
+## TASK-011: Ship a workflow CLI helper
+Context: modules/, docs/API.md §Workflow
+Acceptance Criteria:
+- Provide `python -m` or `scripts/workflow.py` CLI to run dedup→batch→sync→sort
+- Stream progress and surface non-zero exit codes
+Scope boundaries:
+- Reuse existing services; no new API endpoints
+Status: ✅ Added menu-driven `scripts/workflow.py` orchestrator with step summaries and config overrides.
+Owner: Platform Ops AI
+
+## TASK-012: Add observability hooks
+Context: api/, utils/logger.py, docs/OBSERVABILITY.md
+Acceptance Criteria:
+- Emit Prometheus-ready metrics for job counts and durations
+- Export structured logs/traces for sync + sorter modules
+Scope boundaries:
+- Do not introduce external SaaS dependencies
+Status: TODO
+Owner: Unassigned
+
+## TASK-013: Launch operations control UI
+Context: templates/control.html, api/workflow_router.py
+Acceptance Criteria:
+- Provide HTML control panel to edit config, trigger modules, and review workflow results
+- Poll status without page reloads and surface errors to operators
+- Document access path in README and surface CLI availability
+Scope boundaries:
+- Minimal JS (vanilla) only; no SPA build tooling
+Status: ✅ Delivered `/control` UI backed by workflow endpoints.
+Owner: Platform Ops AI
+
+## TASK-014: Surface live log streaming in UI
+Context: templates/control.html, utils/logger.py
+Acceptance Criteria:
+- Display live tail of API and worker logs within the control center
+- Allow filtering by module and log level
+Scope boundaries:
+- Reuse existing log files, no external log aggregation
+Status: TODO
+Owner: Unassigned
