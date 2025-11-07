@@ -18,6 +18,7 @@ class DashboardSummary:
     files: dict[str, Any]
     batches: dict[str, Any]
     storage: dict[str, Any]
+    recent_batches: list[dict[str, Any]]
 
 
 class DashboardService:
@@ -39,12 +40,14 @@ class DashboardService:
         files = self._file_metrics()
         batches = self._batch_metrics()
         storage = self._storage_metrics()
+        recent_batches = self._recent_batches()
 
         return DashboardSummary(
             generated_at=datetime.now(timezone.utc).isoformat(),
             files=files,
             batches=batches,
             storage=storage,
+            recent_batches=recent_batches,
         )
 
     # ------------------------------------------------------------------
@@ -64,6 +67,9 @@ class DashboardService:
             "total": total,
             "by_status": by_status,
             "total_size_bytes": total_size,
+            "completion_percent": self._completion_percentage(
+                by_status.get("SORTED", 0), total
+            ),
         }
 
     def _batch_metrics(self) -> dict[str, object]:
@@ -87,6 +93,9 @@ class DashboardService:
             "by_status": by_status,
             "synced": int(synced_row["synced"]) if synced_row else 0,
             "sorted": int(sorted_row["sorted"]) if sorted_row else 0,
+            "completion_percent": self._completion_percentage(
+                by_status.get("SORTED", 0), total
+            ),
         }
 
     def _storage_metrics(self) -> dict[str, object]:
@@ -94,6 +103,40 @@ class DashboardService:
             "batch_dir_bytes": self._directory_size(self._batch_dir),
             "sorted_dir_bytes": self._directory_size(self._sorted_dir),
         }
+
+    def _recent_batches(self, limit: int = 5) -> list[dict[str, Any]]:
+        rows = self._db.fetchall(
+            """
+            SELECT id, name, status, file_count, size_bytes, created_at, synced_at, sorted_at
+            FROM batches
+            ORDER BY datetime(created_at) DESC, id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        recent: list[dict[str, Any]] = []
+        for row in rows:
+            recent.append(
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "status": row["status"],
+                    "file_count": int(row["file_count"] or 0),
+                    "size_bytes": int(row["size_bytes"] or 0),
+                    "created_at": row["created_at"],
+                    "synced_at": row["synced_at"],
+                    "sorted_at": row["sorted_at"],
+                }
+            )
+        return recent
+
+    def _completion_percentage(self, completed: int, total: int) -> float:
+        if total <= 0:
+            return 0.0
+        try:
+            return round((completed / total) * 100, 1)
+        except ZeroDivisionError:
+            return 0.0
 
     def _directory_size(self, path: Path) -> int:
         if not path.exists():

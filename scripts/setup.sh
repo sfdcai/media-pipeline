@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONFIG_TEMPLATE="$PROJECT_ROOT/config/default_config.yaml"
+INIT_DB_SCRIPT="$PROJECT_ROOT/scripts/init_db.py"
+CONFIGURE_SYNCTHING_SCRIPT="$PROJECT_ROOT/scripts/configure_syncthing.py"
+
 APP_DIR="/opt/media-pipeline"
 PY_ENV="$APP_DIR/.venv"
 DB_DIR="/var/lib/media-pipeline"
@@ -10,10 +16,10 @@ DATA_DIR="$APP_DIR/data"
 
 echo "Updating apt and installing dependencies..."
 sudo apt update -y
-sudo apt install -y python3 python3-venv python3-pip git curl sqlite3 unzip
+sudo apt install -y python3 python3-venv python3-pip git curl sqlite3 unzip syncthing
 
 echo "Creating directories..."
-sudo mkdir -p "$APP_DIR" "$DB_DIR" "$LOG_DIR" "$CONFIG_DIR" "$DATA_DIR"/{logs,manifests,temp}
+sudo mkdir -p "$APP_DIR" "$DB_DIR" "$LOG_DIR" "$CONFIG_DIR" "$DATA_DIR"/{logs,manifests,temp} "$APP_DIR/run"
 sudo chown -R $USER:$USER "$APP_DIR" "$DB_DIR" "$LOG_DIR" "$CONFIG_DIR" "$DATA_DIR"
 
 if [ ! -f "$APP_DIR/requirements.txt" ]; then
@@ -39,7 +45,10 @@ pip install -r "$APP_DIR/requirements.txt"
 
 echo "Writing default config (if missing)..."
 if [ ! -f "$CONFIG_DIR/config.yaml" ]; then
-sudo tee "$CONFIG_DIR/config.yaml" >/dev/null <<'YAML'
+  if [ -f "$CONFIG_TEMPLATE" ]; then
+    sudo cp "$CONFIG_TEMPLATE" "$CONFIG_DIR/config.yaml"
+  else
+    sudo tee "$CONFIG_DIR/config.yaml" >/dev/null <<'YAML'
 paths:
   source_dir: /mnt/nas/photos_raw
   duplicates_dir: /mnt/nas/duplicates
@@ -59,6 +68,7 @@ dedup:
 syncthing:
   api_url: http://127.0.0.1:8384/rest
   api_key: ""
+  folder_id: ""
   poll_interval_sec: 60
   auto_sort_after_sync: true
 
@@ -66,19 +76,28 @@ sorter:
   folder_pattern: "{year}/{month:02d}/{day:02d}"
   exif_fallback: true
 
+auth:
+  api_key: ""
+  header_name: x-api-key
+
 system:
   db_path: /var/lib/media-pipeline/db.sqlite
   log_dir: /var/log/media-pipeline
   port_api: 8080
   port_dbui: 8081
+  max_parallel_fs_ops: 4
   cleanup_empty_batches: true
 YAML
+  fi
 fi
 
 echo "Initializing SQLite database..."
 DB_FILE="$DB_DIR/db.sqlite"
-if [ ! -f "$DB_FILE" ]; then
-sqlite3 "$DB_FILE" <<'SQL'
+if [ -x "$PY_ENV/bin/python" ] && [ -f "$INIT_DB_SCRIPT" ]; then
+  PYTHONPATH="$PROJECT_ROOT" "$PY_ENV/bin/python" "$INIT_DB_SCRIPT" --config "$CONFIG_DIR/config.yaml"
+else
+  if [ ! -f "$DB_FILE" ]; then
+    sqlite3 "$DB_FILE" <<'SQL'
 CREATE TABLE IF NOT EXISTS files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     path TEXT UNIQUE,
@@ -120,6 +139,7 @@ CREATE TABLE IF NOT EXISTS config_changes (
     actor TEXT
 );
 SQL
+  fi
 fi
 
 SERVICE_FILE="/etc/systemd/system/media-pipeline.service"
@@ -141,6 +161,16 @@ WantedBy=multi-user.target
 EOF
 sudo systemctl daemon-reload
 sudo systemctl enable media-pipeline
+fi
+
+if command -v systemctl >/dev/null 2>&1; then
+  sudo systemctl enable --now "syncthing@$USER" >/dev/null 2>&1 || true
+  if [ -f "$CONFIGURE_SYNCTHING_SCRIPT" ]; then
+    echo "Ensuring Syncthing listens on 0.0.0.0..."
+    PYTHONPATH="$PROJECT_ROOT" "$PY_ENV/bin/python" "$CONFIGURE_SYNCTHING_SCRIPT" >/tmp/configure_syncthing.log 2>&1 || true
+    sudo systemctl restart "syncthing@$USER" >/dev/null 2>&1 || true
+    echo "Syncthing configuration output stored at /tmp/configure_syncthing.log"
+  fi
 fi
 
 echo "Done. Start with:"

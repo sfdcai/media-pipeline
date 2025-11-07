@@ -7,6 +7,7 @@ import shutil
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import re
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,12 +32,14 @@ class CleanupService:
         log_dir: Path,
         temp_retention_days: int = 7,
         log_max_bytes: int = 5 * 1024 * 1024,
+        batch_pattern: str | None = None,
     ) -> None:
         self._batch_dir = Path(batch_dir).expanduser().resolve()
         self._temp_dir = Path(temp_dir).expanduser().resolve()
         self._log_dir = Path(log_dir).expanduser().resolve()
         self._retention = timedelta(days=temp_retention_days)
         self._log_max_bytes = log_max_bytes
+        self._batch_regex = self._compile_batch_pattern(batch_pattern)
 
     # ------------------------------------------------------------------
     def run(self) -> CleanupReport:
@@ -57,6 +60,8 @@ class CleanupService:
             return removed
         for candidate in sorted(self._batch_dir.iterdir()):
             if not candidate.is_dir():
+                continue
+            if not self._is_purge_candidate(candidate.name):
                 continue
             try:
                 next(candidate.iterdir())
@@ -116,6 +121,24 @@ class CleanupService:
             except OSError:
                 LOGGER.exception("Failed to rotate log file", extra={"path": str(logfile)})
         return rotated
+
+    def _compile_batch_pattern(self, pattern: str | None) -> re.Pattern[str] | None:
+        if not pattern:
+            return None
+        escaped = re.escape(pattern)
+        regex_source = re.sub(r"\\\{index[^}]*\\\}", r"(?P<index>\\d+)", escaped)
+        if "(?P<index>" not in regex_source:
+            return None
+        return re.compile(f"^{regex_source}$")
+
+    def _is_purge_candidate(self, name: str) -> bool:
+        if name.startswith('.'):
+            return False
+        if name in {".stfolder", ".stignore"}:
+            return False
+        if self._batch_regex is None:
+            return True
+        return bool(self._batch_regex.match(name))
 
 
 __all__ = ["CleanupService", "CleanupReport"]
