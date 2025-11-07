@@ -94,5 +94,42 @@ paths affected by each action.
 
 ### GET /api/dashboard
 
-Aggregates file totals, per-status breakdowns, batch counts, and directory size
-estimates for use by the `/dashboard` HTMX front-end.
+Aggregates file totals, per-status breakdowns, batch counts, directory size
+estimates, and the latest batch metadata for the `/dashboard` HTMX front-end.
+
+Returns a payload shaped as follows:
+
+```json
+{
+  "generated_at": "2025-11-07T10:15:00.123456+00:00",
+  "files": {
+    "total": 42,
+    "by_status": {"SORTED": 30, "BATCHED": 8, "DUPLICATE": 4},
+    "total_size_bytes": 987654321,
+    "completion_percent": 71.4
+  },
+  "batches": {
+    "total": 5,
+    "by_status": {"SORTED": 3, "SYNCING": 1, "PENDING": 1},
+    "synced": 4,
+    "sorted": 3,
+    "completion_percent": 60.0
+  },
+  "storage": {
+    "batch_dir_bytes": 123456789,
+    "sorted_dir_bytes": 456789123
+  },
+  "recent_batches": [
+    {
+      "id": 7,
+      "name": "batch_007",
+      "status": "SORTED",
+      "file_count": 12,
+      "size_bytes": 3456789,
+      "created_at": "2025-11-06T22:10:00Z",
+      "synced_at": "2025-11-06T22:20:00Z",
+      "sorted_at": "2025-11-06T22:30:00Z"
+    }
+  ]
+}
+```

@@ -1,6 +1,12 @@
 # Changelog
 
 ## Unreleased
+- feat(dashboard): expose completion metrics and recent batches for richer summaries
+- fix(dashboard): serialize dataclass payloads without relying on __dict__
+- feat(ui): redesign /dashboard with headline cards, charts, and recent batch table
+- feat(syncthing): ship configurator CLI and auto-bind GUI/listeners to 0.0.0.0 during setup/install
+- fix(debug): detect virtualenvs provisioned under the install directory
+- test: cover syncthing configurator idempotency
 - fix(db): migrate legacy `batches` tables to include numeric ids for workflow APIs
 - fix(api): expose `/config` JSON snapshot for compatibility with legacy tooling
 - test: cover the new configuration snapshot endpoint

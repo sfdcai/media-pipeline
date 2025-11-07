@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONFIG_TEMPLATE="$PROJECT_ROOT/config/default_config.yaml"
 INIT_DB_SCRIPT="$PROJECT_ROOT/scripts/init_db.py"
+CONFIGURE_SYNCTHING_SCRIPT="$PROJECT_ROOT/scripts/configure_syncthing.py"
 
 APP_DIR="/opt/media-pipeline"
 PY_ENV="$APP_DIR/.venv"
@@ -164,6 +165,12 @@ fi
 
 if command -v systemctl >/dev/null 2>&1; then
   sudo systemctl enable --now "syncthing@$USER" >/dev/null 2>&1 || true
+  if [ -f "$CONFIGURE_SYNCTHING_SCRIPT" ]; then
+    echo "Ensuring Syncthing listens on 0.0.0.0..."
+    PYTHONPATH="$PROJECT_ROOT" "$PY_ENV/bin/python" "$CONFIGURE_SYNCTHING_SCRIPT" >/tmp/configure_syncthing.log 2>&1 || true
+    sudo systemctl restart "syncthing@$USER" >/dev/null 2>&1 || true
+    echo "Syncthing configuration output stored at /tmp/configure_syncthing.log"
+  fi
 fi
 
 echo "Done. Start with:"

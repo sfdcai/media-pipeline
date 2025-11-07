@@ -9,6 +9,7 @@ RELEASE_CHANNEL="latest"
 OWNER_USER="${SUDO_USER:-$USER}"
 OWNER_GROUP="$(id -gn "$OWNER_USER" 2>/dev/null || id -gn)"
 CONFIG_DEST="/etc/media-pipeline/config.yaml"
+CONFIGURE_SYNCTHING_SCRIPT="$INSTALL_DIR/scripts/configure_syncthing.py"
 
 usage() {
   cat <<USAGE
@@ -241,6 +242,13 @@ YAML
   if command -v systemctl >/dev/null 2>&1; then
     log "Ensuring syncthing@$OWNER_USER service is enabled"
     $sudo_cmd systemctl enable --now "syncthing@$OWNER_USER" >/dev/null 2>&1 || true
+    if [[ -f "$CONFIGURE_SYNCTHING_SCRIPT" ]]; then
+      log "Configuring Syncthing listeners"
+      $sudo_cmd -u "$OWNER_USER" env PYTHONPATH="$INSTALL_DIR" "$VENV_DIR/bin/python" "$CONFIGURE_SYNCTHING_SCRIPT" \
+        >/tmp/configure_syncthing.log 2>&1 || true
+      $sudo_cmd systemctl restart "syncthing@$OWNER_USER" >/dev/null 2>&1 || true
+      log "Syncthing configuration output written to /tmp/configure_syncthing.log"
+    fi
   fi
 
   log "Installer complete"

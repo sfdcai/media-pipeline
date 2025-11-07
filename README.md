@@ -8,7 +8,7 @@ Media Pipeline is a FastAPI-based automation service that synchronizes, sorts, a
 - **Batch Orchestration** – Deduplicates assets, builds transfer-ready batches, and records manifests for downstream systems.
 - **Syncthing Integration** – Triggers rescans, monitors completion, and feeds events into the SQLite journal for traceability.
 - **EXIF Sorting & Cleanup** – Groups media into date-based folders and removes stale batches or orphaned files.
-- **Operational Dashboard & Control Center** – HTMX dashboard plus a lightweight control UI for editing config, launching runs, and reviewing workflow history.
+- **Operational Dashboard & Control Center** – HTMX dashboard plus a lightweight control UI for editing config, launching runs, reviewing workflow history, and visualizing live progress with charts, progress bars, and headline metrics.
 
 ## Architecture Overview
 
@@ -42,7 +42,7 @@ sudo /opt/media-pipeline/scripts/setup.sh
 sudo /opt/media-pipeline/scripts/run.sh
 ```
 
-The installer detects the host package manager (APT, DNF/YUM, Homebrew) and may prompt for elevated privileges while installing prerequisites. Both `install.sh` and `setup.sh` now provision Syncthing alongside Python tooling, copy `config/default_config.yaml` into `/etc/media-pipeline/config.yaml` when needed, initialize `/var/lib/media-pipeline/db.sqlite`, and build an isolated virtual environment at `/opt/media-pipeline/.venv`. During setup we also create `/opt/media-pipeline/run` for PID tracking, ensure log and manifest directories exist, and enable the `syncthing@<user>` systemd service when `systemctl` is available.
+The installer detects the host package manager (APT, DNF/YUM, Homebrew) and may prompt for elevated privileges while installing prerequisites. Both `install.sh` and `setup.sh` now provision Syncthing alongside Python tooling, copy `config/default_config.yaml` into `/etc/media-pipeline/config.yaml` when needed, initialize `/var/lib/media-pipeline/db.sqlite`, and build an isolated virtual environment at `/opt/media-pipeline/.venv`. During setup we also create `/opt/media-pipeline/run` for PID tracking, ensure log and manifest directories exist, and enable the `syncthing@<user>` systemd service when `systemctl` is available. A dedicated `configure_syncthing.py` helper runs automatically so the Syncthing GUI/API bind to `0.0.0.0:8384` and the sync listeners open on `0.0.0.0:22000`, addressing the localhost-only behaviour highlighted in recent debug captures.
 
 The refreshed `run.sh` script reads port and log settings directly from `config.yaml`, kills any previously launched uvicorn/sqlite-web processes via PID files, and relaunches them with logs written to the configured `system.log_dir` (falling back to `/opt/media-pipeline/data/logs`). Companion helpers `stop.sh` and `restart.sh` live alongside `run.sh` for quick lifecycle management:
 
@@ -100,6 +100,7 @@ Navigate to `http://<host>:8080/control` to open the new operations console. The
 - Trigger the full workflow or individual modules (dedup, batch, sync, sort, cleanup).
 - Select the target batch by ID for sync/sort actions and review the last five batches at a glance.
 - Monitor dedup status, aggregated file counts, and the results of the most recent workflow run without refreshing.
+- Jump straight to the `/dashboard` view for sparkline charts, progress bars, storage usage, and recent batch summaries.
 
 The page refreshes status snapshots automatically every five seconds and surfaces warnings inline when API calls fail.
 
@@ -153,6 +154,17 @@ curl -X POST http://<host>:8080/api/cleanup/run
 ```
 
 Tip: while developing locally you can call these endpoints with the provided `./scripts/debug.sh` to confirm the database schema, log locations, and HTTP health probe responses.
+
+### Syncthing accessibility tweaks
+
+If you need to reapply the Syncthing listener changes (for example after a manual edit of `config.xml`) run:
+
+```bash
+/opt/media-pipeline/.venv/bin/python /opt/media-pipeline/scripts/configure_syncthing.py
+```
+
+Use `--config` to point at a custom `config.xml`. The tool reports the effective GUI address and all listener sockets; the setup
+and install scripts call it automatically and restart `syncthing@<user>` so new bindings take effect immediately.
 
 ## Configuration
 
