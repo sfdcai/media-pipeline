@@ -284,8 +284,8 @@ Acceptance Criteria:
 - Stream progress and surface non-zero exit codes
 Scope boundaries:
 - Reuse existing services; no new API endpoints
-Status: TODO
-Owner: Unassigned
+Status: ✅ Added menu-driven `scripts/workflow.py` orchestrator with step summaries and config overrides.
+Owner: Platform Ops AI
 
 ## TASK-012: Add observability hooks
 Context: api/, utils/logger.py, docs/OBSERVABILITY.md
@@ -294,5 +294,26 @@ Acceptance Criteria:
 - Export structured logs/traces for sync + sorter modules
 Scope boundaries:
 - Do not introduce external SaaS dependencies
+Status: TODO
+Owner: Unassigned
+
+## TASK-013: Launch operations control UI
+Context: templates/control.html, api/workflow_router.py
+Acceptance Criteria:
+- Provide HTML control panel to edit config, trigger modules, and review workflow results
+- Poll status without page reloads and surface errors to operators
+- Document access path in README and surface CLI availability
+Scope boundaries:
+- Minimal JS (vanilla) only; no SPA build tooling
+Status: ✅ Delivered `/control` UI backed by workflow endpoints.
+Owner: Platform Ops AI
+
+## TASK-014: Surface live log streaming in UI
+Context: templates/control.html, utils/logger.py
+Acceptance Criteria:
+- Display live tail of API and worker logs within the control center
+- Allow filtering by module and log level
+Scope boundaries:
+- Reuse existing log files, no external log aggregation
 Status: TODO
 Owner: Unassigned

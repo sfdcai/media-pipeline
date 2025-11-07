@@ -8,7 +8,7 @@ Media Pipeline is a FastAPI-based automation service that synchronizes, sorts, a
 - **Batch Orchestration** – Deduplicates assets, builds transfer-ready batches, and records manifests for downstream systems.
 - **Syncthing Integration** – Triggers rescans, monitors completion, and feeds events into the SQLite journal for traceability.
 - **EXIF Sorting & Cleanup** – Groups media into date-based folders and removes stale batches or orphaned files.
-- **Operational Dashboard** – HTMX interface summarizing throughput, queue depth, and health indicators in near-real time.
+- **Operational Dashboard & Control Center** – HTMX dashboard plus a lightweight control UI for editing config, launching runs, and reviewing workflow history.
 
 ## Getting Started
 
@@ -69,23 +69,42 @@ sqlite_web /var/lib/media-pipeline/db.sqlite --host 0.0.0.0 --port 8081
 
 Backgrounded processes started via `run.sh` emit logs to `/opt/media-pipeline/data/logs/api.log` and `/opt/media-pipeline/data/logs/dbui.log`.
 
+### Interactive Control Center
+
+Navigate to `http://<host>:8080/control` to open the new operations console. The page allows you to:
+
+- Inspect and edit `config.yaml` in-place with validation feedback.
+- Trigger the full workflow or individual modules (dedup, batch, sync, sort, cleanup).
+- Monitor dedup status, recent batches, aggregated file counts, and the results of the most recent workflow run.
+
+The page refreshes status snapshots automatically every five seconds and surfaces warnings inline when API calls fail.
+
+### Menu-driven Workflow CLI
+
+Operators who prefer the terminal can launch the interactive helper:
+
+```bash
+./scripts/workflow.py            # Uses /etc/media-pipeline/config.yaml by default
+./scripts/workflow.py --config /path/to/custom.yaml
+```
+
+The menu mirrors the control center functionality—run the full pipeline, trigger individual modules, or view an overview without issuing raw HTTP requests. Results are printed step-by-step with structured JSON payloads.
+
 ## Operating the Pipeline
 
 Once the services are online, the API lives at `http://<host>:8080` and the sqlite-web console at `http://<host>:8081`.
 
-### End-to-end workflow
+### End-to-end workflow (API)
 
-The orchestrated workflow wires the dedupe → batch → sync → sort pipeline together:
+To start a background workflow run via HTTP, call:
 
 ```bash
-curl -X POST http://<host>:8080/api/workflow/run \
-  -H "Content-Type: application/json" \
-  -d '{"force_rescan": true}'
+curl -X POST http://<host>:8080/api/workflow/run
 ```
 
-Responses include a job identifier that can be polled via `GET /api/workflow/status/{job_id}` (see [`docs/API.md`](docs/API.md)).
+The endpoint responds with `{ "started": true }` when a pipeline begins or `{ "started": false }` if another run is still in-flight. Poll `GET /api/workflow/status` for the latest result snapshot and `GET /api/workflow/overview` for live metrics.
 
-### Triggering modules one at a time
+### Triggering modules one at a time (API)
 
 Each subsystem can also be invoked independently—handy for incremental processing or debugging specific steps. All examples below assume the API is running and authentication is disabled (the default). Add the header `-H "x-api-key: <token>"` when auth is enabled.
 
@@ -96,15 +115,14 @@ curl http://<host>:8080/api/dedup/status
 
 # 2. Build a batch of unique files (adjust max_size_gb in config.yaml for throughput)
 curl -X POST http://<host>:8080/api/batch/create
-curl http://<host>:8080/api/batch/list
 
-# 3. Kick off Syncthing sync for a batch
-curl -X POST http://<host>:8080/api/sync/start/{batch_id}
-curl http://<host>:8080/api/sync/status/{batch_id}
+# 3. Kick off Syncthing sync for a batch (replace BATCH_NAME)
+curl -X POST http://<host>:8080/api/workflow/sync/BATCH_NAME
+curl http://<host>:8080/api/sync/status/BATCH_NAME
 
 # 4. Sort synced files into the archival tree
-curl -X POST http://<host>:8080/api/sort/start/{batch_id}
-curl http://<host>:8080/api/sort/status/{batch_id}
+curl -X POST http://<host>:8080/api/workflow/sort/BATCH_NAME
+curl http://<host>:8080/api/sort/status/BATCH_NAME
 
 # 5. Periodic maintenance (log rotation, stale artifacts, temp pruning)
 curl -X POST http://<host>:8080/api/cleanup/run
@@ -121,8 +139,8 @@ Default configuration values are stored at `/etc/media-pipeline/config.yaml` whe
 We are actively tracking the next improvements for the pipeline:
 
 - **Systemd hardening:** ship dedicated unit files for the API and sqlite-web processes (socket activation, restart policies, log forwarding).
-- **Workflow CLI:** expose a command-line helper that can start, monitor, and summarize workflow runs without writing raw `curl` calls.
 - **Observability:** emit Prometheus metrics and structured traces so that sync throughput and error rates can be graphed over time.
+- **Live log streaming:** surface tail-follow views in the control center to monitor API and worker output in real time.
 
 See [`prompts/TASKS.md`](prompts/TASKS.md) for the detailed task breakdown and status.
 

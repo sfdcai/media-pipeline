@@ -12,11 +12,45 @@ Base URL: `http://<host>:8080`
 - POST /api/sort/start/{batch_id}
 - GET  /api/sort/status/{batch_id}
 - POST /api/workflow/run
+- GET  /api/workflow/status
+- GET  /api/workflow/overview
+- POST /api/workflow/sync/{batch_id}
+- POST /api/workflow/sort/{batch_id}
 - GET  /api/config
 - PUT  /api/config
 - GET  /api/dashboard
 - POST /api/cleanup/run
 - GET  /dbui  (sqlite-web separate process; see scripts/run.sh)
+
+## Workflow
+
+### POST /api/workflow/run
+
+Launch the full dedup → batch → sync → sort pipeline as a background task.
+Returns `{ "started": true }` when the workflow begins or `{ "started": false }`
+if a previous run is still in progress.
+
+### GET /api/workflow/status
+
+Summarises the state of the asynchronous workflow runner, including whether it
+is currently processing and the most recent run summary (if available).
+
+### GET /api/workflow/overview
+
+Convenience endpoint consumed by the control center UI. Returns dedup status,
+recent batches, file counts by status, the `running` flag, and the most recent
+workflow results.
+
+### POST /api/workflow/sync/{batch_name}
+
+Start a Syncthing sync cycle for the batch and poll completion briefly. Returns
+step metadata (`status`, `progress`, `synced_at`, etc.). Skips work when the
+batch is already syncing or has reached `SYNCED`.
+
+### POST /api/workflow/sort/{batch_name}
+
+Run the sorter for a batch, returning the number of files moved and files
+skipped. Responses mirror the structure used by the CLI/control center.
 
 ## Sync
 
