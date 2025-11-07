@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
@@ -40,12 +42,14 @@ async def get_sync_service(request: Request) -> SyncService:
     return service
 
 
+SyncServiceDep = Annotated[SyncService, Depends(get_sync_service)]
+
+
 @router.post("/start/{batch_id}", response_model=SyncStartResponse)
 async def start_sync(
     batch_id: int,
     request: Request,
-    service: SyncService = Depends(get_sync_service),
-    request: Request,
+    service: SyncServiceDep,
 ) -> SyncStartResponse:
     try:
         batch_name = _resolve_batch_name(batch_id, request)
@@ -61,8 +65,7 @@ async def start_sync(
 async def sync_status(
     batch_id: int,
     request: Request,
-    service: SyncService = Depends(get_sync_service),
-    request: Request,
+    service: SyncServiceDep,
 ) -> SyncStatusResponse:
     try:
         batch_name = _resolve_batch_name(batch_id, request)
