@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -44,16 +45,6 @@ def _resolve_batch_name(batch_id: int, request: Request) -> str:
     return row["name"]
 
 
-def _resolve_batch_name(batch_id: int, request: Request) -> str:
-    database = getattr(request.app.state, "db", None)
-    if database is None:
-        raise HTTPException(status_code=500, detail="Database not configured")
-    row = database.fetchone("SELECT name FROM batches WHERE id = ?", (batch_id,))
-    if row is None:
-        raise HTTPException(status_code=404, detail=f"Unknown batch id {batch_id}")
-    return row["name"]
-
-
 async def get_sync_service(request: Request) -> SyncService:
     service = getattr(request.app.state, "sync_service", None)
     if service is None:
@@ -77,7 +68,7 @@ async def start_sync(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return SyncStartResponse(**result.__dict__)
+    return SyncStartResponse(**asdict(result))
 
 
 @router.get("/status/{batch_id}", response_model=SyncStatusResponse)
@@ -91,13 +82,13 @@ async def sync_status(
         result = service.status(batch_name)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return SyncStatusResponse(**result.__dict__)
+    return SyncStatusResponse(**asdict(result))
 
 
 @router.get("/diagnostics", response_model=SyncDiagnosticsResponse)
 async def sync_diagnostics(service: SyncServiceDep) -> SyncDiagnosticsResponse:
     diagnostics: SyncDiagnostics = service.diagnostics()
-    return SyncDiagnosticsResponse(**diagnostics.__dict__)
+    return SyncDiagnosticsResponse(**asdict(diagnostics))
 
 
 __all__ = ["router", "start_sync", "sync_status", "sync_diagnostics"]

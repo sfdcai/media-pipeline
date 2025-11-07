@@ -24,6 +24,22 @@ Base URL: `http://<host>:8080`
 - POST /api/cleanup/run
 - GET  /dbui  (sqlite-web separate process; see scripts/run.sh)
 
+## Batch
+
+### POST /api/batch/create
+
+Creates a new batch by selecting files according to the configured
+`batch.selection_mode`. When set to `size`, files are added until the running
+total reaches `batch.max_size_gb`. When set to `files`, the service stops after
+`batch.max_files` entries. The endpoint returns the manifest metadata alongside
+`created`, `batch_name`, `file_count`, and `size_bytes`.
+
+If `batch.allow_parallel` is `false` (the default) and another batch has not yet
+reached `SORTED`, the response is `{ "created": false, "reason": "...", "blocking_batch": "batch_001" }`. This guards
+single-folder Syncthing deployments from generating overlapping batches. The
+`reason` and `blocking_batch` fields are omitted when a new batch is created
+successfully.
+
 ## Workflow
 
 ### POST /api/workflow/run

@@ -67,6 +67,24 @@ def build_service_container(
     batch_max_size = get_config_value(
         "batch", "max_size_gb", default=15, config=config_data
     )
+    batch_selection_mode = get_config_value(
+        "batch", "selection_mode", default="size", config=config_data
+    )
+    batch_max_files = get_config_value(
+        "batch", "max_files", default=0, config=config_data
+    )
+    batch_allow_parallel_value = get_config_value(
+        "batch", "allow_parallel", default=False, config=config_data
+    )
+    if isinstance(batch_allow_parallel_value, str):
+        batch_allow_parallel = batch_allow_parallel_value.strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+    else:
+        batch_allow_parallel = bool(batch_allow_parallel_value)
     batch_pattern = get_config_value(
         "batch", "naming_pattern", default="batch_{index:03d}", config=config_data
     )
@@ -109,6 +127,9 @@ def build_service_container(
         naming_pattern=str(batch_pattern)
         if batch_pattern is not None
         else "batch_{index:03d}",
+        selection_mode=str(batch_selection_mode or "size"),
+        max_files=batch_max_files,
+        allow_parallel=batch_allow_parallel,
     )
     sync_service = SyncService(
         database,

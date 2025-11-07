@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
@@ -40,7 +42,7 @@ async def start_sort(
         result = service.start(batch_name)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return SortStartResponse(**result.__dict__)
+    return SortStartResponse(**asdict(result))
 
 
 @router.get("/status/{batch_name}", response_model=SortStatusResponse)
@@ -52,7 +54,7 @@ async def sort_status(
         result = service.status(batch_name)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return SortStatusResponse(**result.__dict__)
+    return SortStatusResponse(**asdict(result))
 
 
 __all__ = ["router", "start_sort", "sort_status"]

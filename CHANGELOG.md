@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+- fix(api): serialize dataclass responses with `asdict` to support slots-based models across cleanup/sort/sync endpoints
+- feat(batch): add file-count selection mode, sequential batch guard, and expose skip reasons in API responses
+- fix(config): rebuild the FastAPI service container after `/api/config` updates so every module reads a single config snapshot
+- docs: describe batch selection options, sequential guardrails, and centralized configuration in README/API/CONFIG
+- test: cover file-count batching and the sequential guard in `tests/test_batch.py`
 - fix(sync): refresh syncing batches during overview generation and add `/api/workflow/sync/refresh` for manual progress polls
 - feat(ui): surface an active sync panel with manual refresh controls and shareable dashboard/control/db-ui URLs in /control
 - fix(config): ignore blank MEDIA_PIPELINE_CONFIG overrides when resolving the effective configuration path

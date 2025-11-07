@@ -35,6 +35,9 @@ def _load_default_config() -> Dict[str, Any]:
         "batch": {
             "max_size_gb": 15,
             "naming_pattern": "batch_{index:03d}",
+            "selection_mode": "size",
+            "max_files": 0,
+            "allow_parallel": False,
         },
         "dedup": {
             "hash_algorithm": "sha256",

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import yaml
 from starlette.requests import Request
+from types import SimpleNamespace
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -50,8 +51,20 @@ def test_update_config_merges_and_logs(tmp_path: Path, monkeypatch) -> None:
         "paths": {"source_dir": "/data/source"},
     }
 
+    stub_app = SimpleNamespace(state=SimpleNamespace())
+    request = Request({"type": "http", "app": stub_app})
+    monkeypatch.setattr(
+        "api.config_router.install_container", lambda app, container: None
+    )
+
     result = asyncio.run(
-        update_config(updates, db=database, config_path=config_path, actor="tester")
+        update_config(
+            request,
+            updates,
+            db=database,
+            config_path=config_path,
+            actor="tester",
+        )
     )
 
     assert result["dedup"]["threads"] == 6
@@ -89,7 +102,13 @@ def test_update_config_merges_and_logs(tmp_path: Path, monkeypatch) -> None:
     ) in parsed
 
     second = asyncio.run(
-        update_config(updates, db=database, config_path=config_path, actor="tester")
+        update_config(
+            request,
+            updates,
+            db=database,
+            config_path=config_path,
+            actor="tester",
+        )
     )
     assert second == result
     rows_after = database.fetchall(

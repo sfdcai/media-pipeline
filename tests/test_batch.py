@@ -120,3 +120,75 @@ async def _run_router_scenario(tmp_path: Path) -> None:
     assert follow_up.created is False
 
     db.close()
+
+
+def test_batch_service_respects_file_limit(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    batch_dir = tmp_path / "batches"
+    db = DatabaseManager(tmp_path / "db.sqlite")
+
+    for idx in range(3):
+        file_path = source_dir / f"file-{idx}.txt"
+        file_path.write_text(f"payload-{idx}", encoding="utf-8")
+        size = file_path.stat().st_size
+        _insert_file(db, file_path, size, f"sha-{idx}")
+
+    service = BatchService(
+        db,
+        source_dir=source_dir,
+        batch_dir=batch_dir,
+        selection_mode="files",
+        max_files=2,
+    )
+
+    result = service.create_batch()
+
+    assert result.created is True
+    assert result.file_count == 2
+    assert result.reason is None
+
+    remaining_unique = db.fetchall(
+        "SELECT path FROM files WHERE status = ?", (FILE_STATUS_UNIQUE,)
+    )
+    # One file should remain unbatched because of the file-count limit.
+    assert len(remaining_unique) == 1
+
+    db.close()
+
+
+def test_batch_service_blocks_until_previous_sorted(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    batch_dir = tmp_path / "batches"
+    db = DatabaseManager(tmp_path / "db.sqlite")
+
+    first_file = source_dir / "initial.txt"
+    first_file.write_text("initial", encoding="utf-8")
+    _insert_file(db, first_file, first_file.stat().st_size, "sha-initial")
+
+    service = BatchService(db, source_dir=source_dir, batch_dir=batch_dir)
+
+    first_batch = service.create_batch()
+    assert first_batch.created is True
+    assert first_batch.batch_name is not None
+
+    later_file = source_dir / "later.txt"
+    later_file.write_text("later", encoding="utf-8")
+    _insert_file(db, later_file, later_file.stat().st_size, "sha-later")
+
+    blocked = service.create_batch()
+    assert blocked.created is False
+    assert blocked.reason is not None
+    assert blocked.blocking_batch == first_batch.batch_name
+
+    db.execute(
+        "UPDATE batches SET status = ?, sorted_at = datetime('now') WHERE id = ?",
+        ("SORTED", first_batch.batch_id),
+    ).close()
+
+    second_batch = service.create_batch()
+    assert second_batch.created is True
+    assert second_batch.batch_name != first_batch.batch_name
+
+    db.close()

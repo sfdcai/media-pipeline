@@ -6,6 +6,7 @@ Media Pipeline is a FastAPI-based automation service that synchronizes, sorts, a
 
 - **Configuration Management** – RESTful endpoints for inspecting and updating YAML-driven application configuration.
 - **Batch Orchestration** – Deduplicates assets, builds transfer-ready batches, and records manifests for downstream systems.
+- **Centralized Configuration** – A single config snapshot powers the API, CLI, and UI; updates through `/api/config` hot-reload the service container without restarts.
 - **Syncthing Integration** – Triggers rescans, monitors completion, and feeds events into the SQLite journal for traceability.
 - **EXIF Sorting & Cleanup** – Groups media into date-based folders and removes stale batches or orphaned files.
 - **Operational Dashboard & Control Center** – HTMX dashboard plus a lightweight control UI for editing config, launching runs, reviewing workflow history, and visualizing live progress with charts, progress bars, and headline metrics.
@@ -16,7 +17,7 @@ The service is composed of modular building blocks that share a common service c
 
 - **`utils/service_container.py`** wires together the SQLite database manager, Syncthing client, and the core modules using the active configuration (from `/etc/media-pipeline/config.yaml` by default).
 - **Dedup module (`modules/dedup.py`)** scans the ingestion directory, hashes files, and labels duplicates so they can be excluded from batching.
-- **Batch module (`modules/batch.py`)** selects unique files up to a configurable size limit, moves them into `batch_dir`, and records both a manifest and the `batch_id`/`batch_name` pair used throughout the pipeline.
+- **Batch module (`modules/batch.py`)** selects unique files according to either a size budget or a file-count limit, moves them into `batch_dir`, and records both a manifest and the `batch_id`/`batch_name` pair used throughout the pipeline. By default the service blocks new batches until the prior one has been synced and sorted, matching a single Syncthing folder deployment.
 - **Sync monitor (`modules/sync_monitor.py`)** coordinates with Syncthing to rescan the batch folder, polls completion, and marks database records as synced.
 - **Sorter (`modules/exif_sorter.py`)** reads EXIF data (with filesystem timestamps as a fallback) and files them into the archival tree.
 - **Cleanup (`modules/cleanup.py`)** prunes empty batch directories, old temp files, and rotates log files as needed.
@@ -194,7 +195,25 @@ and install scripts call it automatically and restart `syncthing@<user>` so new 
 
 ## Configuration
 
-Default configuration values are stored at `/etc/media-pipeline/config.yaml` when installed via the provided scripts. The REST API exposes `GET /api/config` and `PUT /api/config` endpoints for live inspection and updates. Refer to [`docs/CONFIG.md`](docs/CONFIG.md) for the full schema and guidance on overriding paths, deduplication settings, Syncthing credentials, and dashboard options.
+Default configuration values are stored at `/etc/media-pipeline/config.yaml` when installed via the provided scripts. The REST API exposes `GET /api/config` and `PUT /api/config` endpoints for live inspection and updates. Whenever `/api/config` persists changes, the server rebuilds its service container so every module immediately reads the updated settings—there is only a single authoritative configuration snapshot in memory.
+
+Key batch-related settings:
+
+- `batch.selection_mode` – Choose `size` (default) to limit batches by gigabytes or `files` to cap by file count.
+- `batch.max_size_gb` / `batch.max_files` – Respectively control the size threshold and the maximum files selected when the corresponding mode is active.
+- `batch.allow_parallel` – When `false` (default), `BatchService` refuses to start a new batch while another remains `PENDING`, `SYNCING`, `SYNCED`, `SORTING`, or `ERROR`. Set to `true` only when Syncthing watches multiple destinations and concurrent batches are acceptable.
+
+Refer to [`docs/CONFIG.md`](docs/CONFIG.md) for the full schema and guidance on overriding paths, deduplication settings, Syncthing credentials, and dashboard options.
+
+## Enhancement Opportunities
+
+We are actively tracking the next improvements for the pipeline:
+
+- **Systemd hardening:** ship dedicated unit files for the API and sqlite-web processes (socket activation, restart policies, log forwarding).
+- **Observability:** emit Prometheus metrics and structured traces so that sync throughput and error rates can be graphed over time.
+- **Live log streaming:** surface tail-follow views in the control center to monitor API and worker output in real time.
+
+See [`prompts/TASKS.md`](prompts/TASKS.md) for the detailed task breakdown and status.
 
 ## Enhancement Opportunities
 

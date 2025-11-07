@@ -18,7 +18,7 @@ from api.sort_router import router as sort_router
 from api.sync_router import router as sync_router
 from api.workflow_router import router as workflow_router
 from middlewares import APIKeyMiddleware
-from modules.workflow import WorkflowManager, WorkflowOrchestrator
+from utils.application_state import install_container
 from utils.config_loader import get_config_value, load_config, resolve_config_path
 from utils.service_container import build_service_container
 
@@ -32,22 +32,7 @@ def _initialize_services(application: FastAPI) -> None:
     config_path = resolve_config_path(config_override)
     config_data = load_config(config_path)
     container = build_service_container(config_data, config_path=config_path)
-
-    application.state.db = container.database
-    application.state.dedup_service = container.dedup_service
-    application.state.batch_service = container.batch_service
-    application.state.sync_service = container.sync_service
-    application.state.sort_service = container.sort_service
-    application.state.cleanup_service = container.cleanup_service
-    application.state.dashboard_service = container.dashboard_service
-    application.state.syncthing_api = container.syncthing_api
-    application.state.config = container.config
-    application.state.config_path = str(config_path)
-    os.environ.setdefault("MEDIA_PIPELINE_CONFIG", str(config_path))
-
-    orchestrator = WorkflowOrchestrator(container)
-    application.state.workflow_orchestrator = orchestrator
-    application.state.workflow_manager = WorkflowManager(orchestrator)
+    install_container(application, container)
 
 
 _initialize_services(app)
