@@ -7,53 +7,63 @@ import threading
 from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence
 
+FILES_TABLE_STATEMENT = """
+CREATE TABLE IF NOT EXISTS files (
+    path TEXT PRIMARY KEY,
+    size INTEGER,
+    sha256 TEXT,
+    exif_datetime TEXT,
+    ctime REAL,
+    mtime REAL,
+    status TEXT,
+    batch_id INTEGER,
+    target_path TEXT,
+    error TEXT
+)
+"""
+
+BATCHES_TABLE_STATEMENT = """
+CREATE TABLE IF NOT EXISTS batches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    size_bytes INTEGER,
+    file_count INTEGER,
+    status TEXT,
+    created_at TEXT,
+    synced_at TEXT,
+    sorted_at TEXT,
+    manifest_path TEXT
+)
+"""
+
+EVENTS_TABLE_STATEMENT = """
+CREATE TABLE IF NOT EXISTS events (
+    ts TEXT,
+    module TEXT,
+    level TEXT,
+    message TEXT,
+    context TEXT
+)
+"""
+
+CONFIG_CHANGES_TABLE_STATEMENT = """
+CREATE TABLE IF NOT EXISTS config_changes (
+    ts TEXT,
+    key TEXT,
+    old_value TEXT,
+    new_value TEXT,
+    actor TEXT
+)
+"""
+
 SCHEMA_STATEMENTS = (
-    """
-    CREATE TABLE IF NOT EXISTS files (
-        path TEXT PRIMARY KEY,
-        size INTEGER,
-        sha256 TEXT,
-        exif_datetime TEXT,
-        ctime REAL,
-        mtime REAL,
-        status TEXT,
-        batch_id INTEGER,
-        target_path TEXT,
-        error TEXT
-    )
-    """,
+    FILES_TABLE_STATEMENT,
     "CREATE INDEX IF NOT EXISTS idx_files_sha256 ON files(sha256)",
     "CREATE INDEX IF NOT EXISTS idx_files_status ON files(status)",
-    """
-    CREATE TABLE IF NOT EXISTS batches (
-        name TEXT PRIMARY KEY,
-        size_bytes INTEGER,
-        file_count INTEGER,
-        status TEXT,
-        created_at TEXT,
-        synced_at TEXT,
-        sorted_at TEXT,
-        manifest_path TEXT
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS events (
-        ts TEXT,
-        module TEXT,
-        level TEXT,
-        message TEXT,
-        context TEXT
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS config_changes (
-        ts TEXT,
-        key TEXT,
-        old_value TEXT,
-        new_value TEXT,
-        actor TEXT
-    )
-    """,
+    BATCHES_TABLE_STATEMENT,
+    "CREATE INDEX IF NOT EXISTS idx_batches_status ON batches(status)",
+    EVENTS_TABLE_STATEMENT,
+    CONFIG_CHANGES_TABLE_STATEMENT,
 )
 
 
@@ -78,9 +88,69 @@ class DatabaseManager:
     def _initialize_schema(self) -> None:
         with self._lock:
             cursor = self._connection.cursor()
-            for statement in SCHEMA_STATEMENTS:
-                cursor.execute(statement)
-            cursor.close()
+            try:
+                for statement in SCHEMA_STATEMENTS:
+                    cursor.execute(statement)
+                self._apply_migrations(cursor)
+            finally:
+                cursor.close()
+
+    def _apply_migrations(self, cursor: sqlite3.Cursor) -> None:
+        self._ensure_batches_have_id(cursor)
+
+    def _ensure_batches_have_id(self, cursor: sqlite3.Cursor) -> None:
+        columns = self._get_table_columns(cursor, "batches")
+        if "id" in columns:
+            return
+
+        cursor.execute("ALTER TABLE batches RENAME TO batches_old")
+        cursor.execute(
+            """
+            CREATE TABLE batches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                size_bytes INTEGER,
+                file_count INTEGER,
+                status TEXT,
+                created_at TEXT,
+                synced_at TEXT,
+                sorted_at TEXT,
+                manifest_path TEXT
+            )
+            """
+        )
+        cursor.execute(
+            """
+            INSERT INTO batches (
+                name,
+                size_bytes,
+                file_count,
+                status,
+                created_at,
+                synced_at,
+                sorted_at,
+                manifest_path
+            )
+            SELECT
+                name,
+                size_bytes,
+                file_count,
+                status,
+                created_at,
+                synced_at,
+                sorted_at,
+                manifest_path
+            FROM batches_old
+            ORDER BY rowid
+            """
+        )
+        cursor.execute("DROP TABLE batches_old")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_batches_status ON batches(status)")
+
+    @staticmethod
+    def _get_table_columns(cursor: sqlite3.Cursor, table: str) -> list[str]:
+        cursor.execute(f"PRAGMA table_info({table})")
+        return [row[1] for row in cursor.fetchall()]
 
     def execute(
         self, query: str, parameters: Sequence[Any] | None = None
