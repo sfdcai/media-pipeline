@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- fix(db): migrate legacy `batches` tables to include numeric ids for workflow APIs
 - fix(api): expose `/config` JSON snapshot for compatibility with legacy tooling
 - test: cover the new configuration snapshot endpoint
 - feat(run): add config-aware run/stop/restart helpers with PID tracking

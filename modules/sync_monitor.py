@@ -113,7 +113,7 @@ class SyncService:
         progress = completion.completion
 
         if progress >= 100.0:
-            synced_at = self._mark_batch_synced(batch_name, record["rowid"])
+            synced_at = self._mark_batch_synced(batch_name, record["id"])
             status = BATCH_STATUS_SYNCED
             progress = 100.0
 
@@ -122,28 +122,28 @@ class SyncService:
     # ------------------------------------------------------------------
     def _get_batch(self, batch_name: str) -> Optional[dict[str, Optional[str]]]:
         row = self._db.fetchone(
-            "SELECT rowid, name, status, synced_at FROM batches WHERE name = ?",
+            "SELECT id, name, status, synced_at FROM batches WHERE name = ?",
             (batch_name,),
         )
         if row is None:
             return None
         return {
-            "rowid": int(row["rowid"]) if row["rowid"] is not None else None,
+            "id": int(row["id"]) if row["id"] is not None else None,
             "name": row["name"],
             "status": row["status"],
             "synced_at": row["synced_at"],
         }
 
-    def _mark_batch_synced(self, batch_name: str, rowid: int | None) -> str:
+    def _mark_batch_synced(self, batch_name: str, batch_id: int | None) -> str:
         timestamp = datetime.now(timezone.utc).isoformat()
         self._db.execute(
             "UPDATE batches SET status = ?, synced_at = ? WHERE name = ?",
             (BATCH_STATUS_SYNCED, timestamp, batch_name),
         ).close()
-        if rowid is not None:
+        if batch_id is not None:
             self._db.execute(
                 "UPDATE files SET status = ? WHERE batch_id = ? AND status IN (?, ?)",
-                (FILE_STATUS_SYNCED, rowid, FILE_STATUS_BATCHED, FILE_STATUS_SYNCED),
+                (FILE_STATUS_SYNCED, batch_id, FILE_STATUS_BATCHED, FILE_STATUS_SYNCED),
             ).close()
         return timestamp
 
