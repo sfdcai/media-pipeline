@@ -25,7 +25,7 @@ USAGE
 }
 
 log() {
-  printf "[install] %s\n" "$1"
+  printf "[install] %s\n" "$1" >&2
 }
 
 need_cmd() {
@@ -127,14 +127,18 @@ fetch_release() {
   local download_url
 
   if [[ "$channel" == "latest" ]]; then
-    download_url="https://api.github.com/repos/${PROJECT_REPO}/tarball"
+    # Fetch latest release tag dynamically
+    local latest_tag
+    latest_tag=$(curl -s https://api.github.com/repos/${PROJECT_REPO}/releases/latest | grep '"tag_name"' | awk -F '"' '{print $4}')
+    download_url="https://github.com/${PROJECT_REPO}/archive/refs/tags/${latest_tag}.zip"
   else
-    download_url="https://api.github.com/repos/${PROJECT_REPO}/tarball/${channel}"
+    download_url="https://github.com/${PROJECT_REPO}/archive/refs/tags/${channel}.zip"
   fi
 
-  log "Downloading release ($channel)"
+  log "Downloading release from: $download_url"
   need_cmd curl
-  curl -fsSL "$download_url" -o "$tmp_dir/release.tar.gz"
+  curl -fSL "$download_url" -o "$tmp_dir/release.zip"
+
   echo "$tmp_dir"
 }
 
@@ -144,16 +148,22 @@ unpack_release() {
   sudo_cmd=$(ensure_sudo)
 
   log "Extracting release into $INSTALL_DIR"
+
   $sudo_cmd mkdir -p "$INSTALL_DIR"
-  need_cmd tar
-  tar -xzf "$archive_dir/release.tar.gz" -C "$archive_dir"
+
+  need_cmd unzip
+  unzip -q "$archive_dir/release.zip" -d "$archive_dir"
+
   local extracted_dir
   extracted_dir=$(find "$archive_dir" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+
   if [[ -d "$INSTALL_DIR" && "$INSTALL_DIR" != "/" ]]; then
     $sudo_cmd rm -rf "$INSTALL_DIR"/*
   fi
+
   $sudo_cmd cp -a "$extracted_dir"/. "$INSTALL_DIR"/
 }
+
 
 setup_virtualenv() {
   log "Creating virtual environment"
