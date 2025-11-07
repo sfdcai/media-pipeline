@@ -35,11 +35,11 @@ async def workflow_overview(manager: WorkflowManager = Depends(get_manager)) -> 
     return manager.overview()
 
 
-@router.post("/sync/{batch_name}", response_model=dict)
+@router.post("/sync/{batch_id}", response_model=dict)
 async def workflow_sync(
-    batch_name: str, manager: WorkflowManager = Depends(get_manager)
+    batch_id: int, manager: WorkflowManager = Depends(get_manager)
 ) -> dict:
-    result = await manager.orchestrator.run_sync(batch_name)
+    result = await manager.orchestrator.run_sync(batch_id)
     return {
         "status": result.status,
         "message": result.message,
@@ -47,11 +47,11 @@ async def workflow_sync(
     }
 
 
-@router.post("/sort/{batch_name}", response_model=dict)
+@router.post("/sort/{batch_id}", response_model=dict)
 async def workflow_sort(
-    batch_name: str, manager: WorkflowManager = Depends(get_manager)
+    batch_id: int, manager: WorkflowManager = Depends(get_manager)
 ) -> dict:
-    result = manager.orchestrator.run_sort(batch_name)
+    result = manager.orchestrator.run_sort(batch_id)
     return {
         "status": result.status,
         "message": result.message,

@@ -274,8 +274,8 @@ Acceptance Criteria:
 - Document journalctl troubleshooting steps
 Scope boundaries:
 - No containerization or supervisor replacement
-Status: TODO
-Owner: Unassigned
+Status: DOING — Added PID-aware run/stop/restart helpers and Syncthing enablement; systemd unit hardening still pending.
+Owner: Platform Ops AI
 
 ## TASK-011: Ship a workflow CLI helper
 Context: modules/, docs/API.md §Workflow

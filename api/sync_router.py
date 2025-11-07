@@ -23,6 +23,16 @@ class SyncStatusResponse(BaseModel):
     synced_at: str | None = None
 
 
+def _resolve_batch_name(batch_id: int, request: Request) -> str:
+    database = getattr(request.app.state, "db", None)
+    if database is None:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    row = database.fetchone("SELECT name FROM batches WHERE id = ?", (batch_id,))
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Unknown batch id {batch_id}")
+    return row["name"]
+
+
 async def get_sync_service(request: Request) -> SyncService:
     service = getattr(request.app.state, "sync_service", None)
     if service is None:
@@ -30,12 +40,14 @@ async def get_sync_service(request: Request) -> SyncService:
     return service
 
 
-@router.post("/start/{batch_name}", response_model=SyncStartResponse)
+@router.post("/start/{batch_id}", response_model=SyncStartResponse)
 async def start_sync(
-    batch_name: str,
+    batch_id: int,
     service: SyncService = Depends(get_sync_service),
+    request: Request,
 ) -> SyncStartResponse:
     try:
+        batch_name = _resolve_batch_name(batch_id, request)
         result = service.start(batch_name)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -44,12 +56,14 @@ async def start_sync(
     return SyncStartResponse(**result.__dict__)
 
 
-@router.get("/status/{batch_name}", response_model=SyncStatusResponse)
+@router.get("/status/{batch_id}", response_model=SyncStatusResponse)
 async def sync_status(
-    batch_name: str,
+    batch_id: int,
     service: SyncService = Depends(get_sync_service),
+    request: Request,
 ) -> SyncStatusResponse:
     try:
+        batch_name = _resolve_batch_name(batch_id, request)
         result = service.status(batch_name)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

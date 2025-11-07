@@ -90,8 +90,16 @@ class WorkflowOrchestrator:
         message = None if result.created else "No eligible files for batching"
         return PipelineStepResult(name="batch", status=status, message=message, data=data)
 
-    async def run_sync(self, batch_name: str) -> PipelineStepResult:
+    async def run_sync(self, batch_id: int) -> PipelineStepResult:
         sync_service = self._container.sync_service
+        batch_record = self._get_batch(batch_id)
+        if batch_record is None:
+            return PipelineStepResult(
+                name="sync",
+                status="error",
+                message=f"Unknown batch id {batch_id}",
+            )
+        batch_name = batch_record["name"]
         try:
             start_result = sync_service.start(batch_name)
         except (ValueError, FileNotFoundError) as exc:
@@ -109,6 +117,7 @@ class WorkflowOrchestrator:
             )
 
         data = {
+            "batch_id": batch_id,
             "batch": start_result.batch,
             "status": start_result.status,
             "started": start_result.started,
@@ -142,8 +151,16 @@ class WorkflowOrchestrator:
             status = sync_service.status(batch_name)
         return status
 
-    def run_sort(self, batch_name: str) -> PipelineStepResult:
+    def run_sort(self, batch_id: int) -> PipelineStepResult:
         sort_service = self._container.sort_service
+        batch_record = self._get_batch(batch_id)
+        if batch_record is None:
+            return PipelineStepResult(
+                name="sort",
+                status="error",
+                message=f"Unknown batch id {batch_id}",
+            )
+        batch_name = batch_record["name"]
         try:
             result = sort_service.start(batch_name)
         except ValueError as exc:
@@ -155,6 +172,7 @@ class WorkflowOrchestrator:
 
         status = "completed" if result.started else "skipped"
         data = {
+            "batch_id": batch_id,
             "batch": result.batch,
             "sorted_files": result.sorted_files,
             "skipped_files": result.skipped_files,
@@ -192,18 +210,18 @@ class WorkflowOrchestrator:
 
         batch_result = self.run_batch()
         steps.append(batch_result)
-        batch_name = batch_result.data.get("batch_name") if batch_result.data else None
+        batch_id = batch_result.data.get("batch_id") if batch_result.data else None
         if batch_result.status == "error" and batch_result.message:
             errors.append(f"batch: {batch_result.message}")
 
-        if batch_result.status == "completed" and batch_name:
-            sync_result = await self.run_sync(batch_name)
+        if batch_result.status == "completed" and batch_id:
+            sync_result = await self.run_sync(int(batch_id))
             steps.append(sync_result)
             if sync_result.status in {"error", "warning"} and sync_result.message:
                 errors.append(f"sync: {sync_result.message}")
 
             if sync_result.status == "completed":
-                sort_result = self.run_sort(batch_name)
+                sort_result = self.run_sort(int(batch_id))
                 steps.append(sort_result)
                 if sort_result.status == "error" and sort_result.message:
                     errors.append(f"sort: {sort_result.message}")
@@ -263,7 +281,7 @@ class WorkflowOrchestrator:
     def _latest_batches(self, *, limit: int) -> list[dict[str, Any]]:
         rows = self._container.database.fetchall(
             """
-            SELECT name, status, created_at, synced_at, sorted_at, manifest_path
+            SELECT id, name, status, created_at, synced_at, sorted_at, manifest_path
             FROM batches
             ORDER BY datetime(created_at) DESC
             LIMIT ?
@@ -273,6 +291,7 @@ class WorkflowOrchestrator:
         result: list[dict[str, Any]] = []
         for row in rows:
             result.append({
+                "id": row["id"],
                 "name": row["name"],
                 "status": row["status"],
                 "created_at": row["created_at"],
@@ -281,6 +300,19 @@ class WorkflowOrchestrator:
                 "manifest_path": row["manifest_path"],
             })
         return result
+
+    def _get_batch(self, batch_id: int) -> dict[str, Any] | None:
+        row = self._container.database.fetchone(
+            "SELECT id, name, status FROM batches WHERE id = ?",
+            (int(batch_id),),
+        )
+        if row is None:
+            return None
+        return {
+            "id": int(row["id"]),
+            "name": row["name"],
+            "status": row["status"],
+        }
 
     def _file_status_counts(self) -> dict[str, int]:
         db: DatabaseManager = self._container.database

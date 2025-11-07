@@ -52,6 +52,7 @@ class BatchCreationResult:
     """Result returned after attempting to create a batch."""
 
     created: bool
+    batch_id: Optional[int] = None
     batch_name: Optional[str] = None
     file_count: int = 0
     size_bytes: int = 0
@@ -62,6 +63,7 @@ class BatchCreationResult:
     def to_dict(self) -> dict[str, Any]:
         return {
             "created": self.created,
+            "batch_id": self.batch_id,
             "batch_name": self.batch_name,
             "file_count": self.file_count,
             "size_bytes": self.size_bytes,
@@ -177,6 +179,7 @@ class BatchService:
 
         return BatchCreationResult(
             created=True,
+            batch_id=batch_rowid,
             batch_name=batch_name,
             file_count=len(moved_records),
             size_bytes=total_size,

@@ -15,10 +15,10 @@ DATA_DIR="$APP_DIR/data"
 
 echo "Updating apt and installing dependencies..."
 sudo apt update -y
-sudo apt install -y python3 python3-venv python3-pip git curl sqlite3 unzip
+sudo apt install -y python3 python3-venv python3-pip git curl sqlite3 unzip syncthing
 
 echo "Creating directories..."
-sudo mkdir -p "$APP_DIR" "$DB_DIR" "$LOG_DIR" "$CONFIG_DIR" "$DATA_DIR"/{logs,manifests,temp}
+sudo mkdir -p "$APP_DIR" "$DB_DIR" "$LOG_DIR" "$CONFIG_DIR" "$DATA_DIR"/{logs,manifests,temp} "$APP_DIR/run"
 sudo chown -R $USER:$USER "$APP_DIR" "$DB_DIR" "$LOG_DIR" "$CONFIG_DIR" "$DATA_DIR"
 
 if [ ! -f "$APP_DIR/requirements.txt" ]; then
@@ -160,6 +160,10 @@ WantedBy=multi-user.target
 EOF
 sudo systemctl daemon-reload
 sudo systemctl enable media-pipeline
+fi
+
+if command -v systemctl >/dev/null 2>&1; then
+  sudo systemctl enable --now "syncthing@$USER" >/dev/null 2>&1 || true
 fi
 
 echo "Done. Start with:"

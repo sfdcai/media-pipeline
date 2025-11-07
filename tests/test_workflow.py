@@ -49,6 +49,7 @@ class StubBatchService:
     def create_batch(self) -> BatchCreationResult:
         return BatchCreationResult(
             created=True,
+            batch_id=1,
             batch_name="batch_001",
             file_count=3,
             size_bytes=123,
@@ -89,6 +90,7 @@ class StubDatabase:
         if "FROM batches" in query:
             return [
                 {
+                    "id": 1,
                     "name": "batch_001",
                     "status": "SYNCED",
                     "created_at": "2024-01-01T00:00:00Z",
@@ -98,6 +100,11 @@ class StubDatabase:
                 }
             ]
         return [{"status": "UNIQUE", "count": 3}, {"status": "SORTED", "count": 5}]
+
+    def fetchone(self, query: str, params: tuple[object, ...] | None = None):
+        if "WHERE id = ?" in query:
+            return {"id": 1, "name": "batch_001", "status": "SYNCED"}
+        return None
 
 
 def build_stub_orchestrator() -> WorkflowOrchestrator:
@@ -174,9 +181,9 @@ async def test_workflow_router_endpoints():
     overview_payload = await workflow_overview(fake_manager)
     assert "dedup" in overview_payload
 
-    sync_payload = await workflow_sync("batch_001", fake_manager)
+    sync_payload = await workflow_sync(1, fake_manager)
     assert sync_payload["status"] in {"completed", "warning", "error"}
 
-    sort_payload = await workflow_sort("batch_001", fake_manager)
+    sort_payload = await workflow_sort(1, fake_manager)
     assert sort_payload["status"] == "completed"
 

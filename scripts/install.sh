@@ -85,7 +85,7 @@ install_packages() {
       exit 1
     fi
     brew update
-    brew install python git sqlite curl unzip || true
+    brew install python git sqlite curl unzip syncthing || true
     return
   fi
 
@@ -96,7 +96,7 @@ install_packages() {
       ubuntu|debian)
         log "Detected Debian/Ubuntu"
         $sudo_cmd apt-get update -y
-        $sudo_cmd apt-get install -y python3 python3-venv python3-pip git curl unzip sqlite3
+        $sudo_cmd apt-get install -y python3 python3-venv python3-pip git curl unzip sqlite3 syncthing
         return
         ;;
       centos|rhel|fedora)
@@ -105,12 +105,12 @@ install_packages() {
         if ! command -v dnf >/dev/null 2>&1; then
           pkgmgr="yum"
         fi
-        $sudo_cmd $pkgmgr install -y python3 python3-venv python3-pip git curl unzip sqlite
+        $sudo_cmd $pkgmgr install -y python3 python3-venv python3-pip git curl unzip sqlite syncthing
         return
         ;;
       arch|manjaro)
         log "Detected Arch Linux"
-        $sudo_cmd pacman -Sy --noconfirm python python-pip git curl unzip sqlite
+        $sudo_cmd pacman -Sy --noconfirm python python-pip git curl unzip sqlite syncthing
         return
         ;;
     esac
@@ -169,7 +169,7 @@ post_install() {
   log "Writing default configuration"
   local sudo_cmd
   sudo_cmd=$(ensure_sudo)
-  $sudo_cmd mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/data/logs" "$INSTALL_DIR/data/manifests" "$INSTALL_DIR/data/temp"
+  $sudo_cmd mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/data/logs" "$INSTALL_DIR/data/manifests" "$INSTALL_DIR/data/temp" "$INSTALL_DIR/run"
   $sudo_cmd mkdir -p /var/lib/media-pipeline /var/log/media-pipeline
   $sudo_cmd mkdir -p /etc/media-pipeline
 
@@ -227,6 +227,11 @@ YAML
     $sudo_cmd env PYTHONPATH="$INSTALL_DIR" "$python_exec" "$INSTALL_DIR/scripts/init_db.py" --config "$CONFIG_DEST"
   fi
   $sudo_cmd chown -R "$OWNER_USER":"$OWNER_GROUP" "$INSTALL_DIR" /var/lib/media-pipeline /var/log/media-pipeline
+
+  if command -v systemctl >/dev/null 2>&1; then
+    log "Ensuring syncthing@$OWNER_USER service is enabled"
+    $sudo_cmd systemctl enable --now "syncthing@$OWNER_USER" >/dev/null 2>&1 || true
+  fi
 
   log "Installer complete"
   cat <<'INFO'

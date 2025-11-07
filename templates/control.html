@@ -33,7 +33,8 @@
         margin-top: 0;
       }
       button,
-      textarea {
+      textarea,
+      select {
         font: inherit;
       }
       button {
@@ -55,6 +56,14 @@
       }
       button:hover:not(:disabled) {
         background: #163b72;
+      }
+      select {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        border: 1px solid #cbd5e1;
+        background: #ffffff;
+        margin-top: 0.5rem;
       }
       textarea {
         width: 100%;
@@ -99,6 +108,16 @@
         gap: 1rem;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       }
+      .card-grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+      .card {
+        background: #e2e8f0;
+        border-radius: 10px;
+        padding: 1rem;
+      }
       .step-list {
         display: grid;
         gap: 0.75rem;
@@ -134,6 +153,18 @@
           <button class="secondary" data-action="sort">Sort Batch</button>
           <button class="secondary" data-action="cleanup">Run Cleanup</button>
         </div>
+        <div style="margin-top: 1rem">
+          <label for="batch-selector" style="font-weight: 600"
+            >Target batch for sync/sort</label
+          >
+          <select id="batch-selector">
+            <option value="">Select a batch…</option>
+          </select>
+          <p style="font-size: 0.85rem; color: #475569; margin-top: 0.35rem">
+            The list shows the five most recent batches. Create a new batch first if
+            none appear.
+          </p>
+        </div>
         <div id="workflow-status" class="status-pill" style="margin-top: 1rem">
           Loading status…
         </div>
@@ -152,14 +183,21 @@
 
       <section>
         <h2>Current Snapshot</h2>
-        <div class="grid-two">
-          <div>
-            <h3>Deduplication</h3>
-            <pre id="dedup-status">Loading…</pre>
+        <div class="card-grid" style="margin-bottom: 1rem">
+          <div class="card">
+            <h3 style="margin-bottom: 0.35rem">Deduplication</h3>
+            <pre id="dedup-status" style="height: 140px">Loading…</pre>
           </div>
-          <div>
-            <h3>File Counts</h3>
-            <pre id="file-counts">Loading…</pre>
+          <div class="card">
+            <h3 style="margin-bottom: 0.35rem">File Counts</h3>
+            <pre id="file-counts" style="height: 140px">Loading…</pre>
+          </div>
+          <div class="card">
+            <h3 style="margin-bottom: 0.35rem">Workflow Notes</h3>
+            <p id="workflow-hints" style="font-size: 0.9rem; line-height: 1.4">
+              Monitor progress from the cards on this page. The overview refreshes every
+              five seconds when open.
+            </p>
           </div>
         </div>
       </section>
@@ -186,6 +224,7 @@
       const statusPill = document.getElementById("workflow-status");
       const configEditor = document.getElementById("config-editor");
       const configMessage = document.getElementById("config-message");
+      const batchSelector = document.getElementById("batch-selector");
       let lastConfigSnapshot = "";
 
       async function apiRequest(path, options = {}) {
@@ -230,12 +269,15 @@
 
         const batchList = document.getElementById("batch-list");
         batchList.innerHTML = "";
+        batchSelector.innerHTML = '<option value="">Select a batch…</option>';
         if (!overview.recent_batches.length) {
           batchList.innerHTML = "<li>No batches yet.</li>";
+          batchSelector.disabled = true;
         } else {
+          batchSelector.disabled = false;
           for (const batch of overview.recent_batches) {
             const item = document.createElement("li");
-            item.textContent = `${batch.name} • ${batch.status}`;
+            item.textContent = `#${batch.id} · ${batch.name} • ${batch.status}`;
             const details = document.createElement("div");
             details.style.fontSize = "0.85rem";
             details.style.color = "#475569";
@@ -244,6 +286,11 @@
             } | sorted: ${batch.sorted_at || "-"}`;
             item.appendChild(details);
             batchList.appendChild(item);
+
+            const option = document.createElement("option");
+            option.value = batch.id;
+            option.textContent = `#${batch.id} – ${batch.name} (${batch.status})`;
+            batchSelector.appendChild(option);
           }
         }
 
@@ -325,14 +372,20 @@
               await apiRequest("/api/batch/create", { method: "POST" });
               break;
             case "sync": {
-              const batch = prompt("Batch name to sync:");
-              if (!batch) return;
+              const batch = batchSelector.value;
+              if (!batch) {
+                alert("Select a batch first.");
+                return;
+              }
               await apiRequest(`/api/workflow/sync/${batch}`, { method: "POST" });
               break;
             }
             case "sort": {
-              const batch = prompt("Batch name to sort:");
-              if (!batch) return;
+              const batch = batchSelector.value;
+              if (!batch) {
+                alert("Select a batch first.");
+                return;
+              }
               await apiRequest(`/api/workflow/sort/${batch}`, { method: "POST" });
               break;
             }

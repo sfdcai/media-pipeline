@@ -66,19 +66,27 @@ class WorkflowCLI:
         self._print_step(result)
 
     async def _run_sync(self) -> None:
-        batch = input("Batch name to sync: ").strip()
+        await self._print_recent_batches()
+        batch = input("Batch ID to sync: ").strip()
         if not batch:
-            print("Batch name required")
+            print("Batch id required")
             return
-        result = await self._orchestrator.run_sync(batch)
+        if not batch.isdigit():
+            print("Batch id must be numeric")
+            return
+        result = await self._orchestrator.run_sync(int(batch))
         self._print_step(result)
 
     async def _run_sort(self) -> None:
-        batch = input("Batch name to sort: ").strip()
+        await self._print_recent_batches()
+        batch = input("Batch ID to sort: ").strip()
         if not batch:
-            print("Batch name required")
+            print("Batch id required")
             return
-        result = self._orchestrator.run_sort(batch)
+        if not batch.isdigit():
+            print("Batch id must be numeric")
+            return
+        result = self._orchestrator.run_sort(int(batch))
         self._print_step(result)
 
     async def _run_cleanup(self) -> None:
@@ -88,6 +96,18 @@ class WorkflowCLI:
     async def _show_overview(self) -> None:
         overview = self._orchestrator.build_overview(last_run=None, running=False)
         print(json.dumps(overview, indent=2, sort_keys=True))
+
+    async def _print_recent_batches(self) -> None:
+        overview = self._orchestrator.build_overview(last_run=None, running=False)
+        batches = overview.get("recent_batches", [])
+        if not batches:
+            print("No batches available yet.")
+            return
+        print("Recent batches:")
+        for batch in batches:
+            print(
+                f"  #{batch['id']}: {batch['name']} ({batch['status']}) created {batch.get('created_at') or '-'}"
+            )
 
     @staticmethod
     def _print_step(step: PipelineStepResult) -> None:

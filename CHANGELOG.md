@@ -1,6 +1,12 @@
 # Changelog
 
 ## Unreleased
+- feat(run): add config-aware run/stop/restart helpers with PID tracking
+- feat(setup): install and enable syncthing during install/setup provisioning
+- feat(workflow): propagate batch ids through orchestrator, API, CLI, and tests
+- feat(ui): refresh control center with batch selectors, cards, and guidance
+- docs: expand README/API with architecture, lifecycle, and batch id usage
+- test: update workflow coverage for id-based orchestration
 - chore(config): add repository default config template and load-time fallback
 - chore(install): bootstrap config and database using shared helper script
 - chore(setup): reuse default template and schema helper during manual installs
