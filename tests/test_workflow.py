@@ -1,0 +1,379 @@
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from api.workflow_router import (
+    run_workflow,
+    workflow_overview,
+    workflow_debug_advance,
+    workflow_sort,
+    workflow_status,
+    workflow_sync,
+    workflow_sync_refresh,
+)
+from modules.batch import BatchCreationResult, BATCH_STATUS_SYNCED, BATCH_STATUS_PENDING
+from modules.cleanup import CleanupReport
+from modules.exif_sorter import SortResult
+from modules.sync_monitor import SyncStartResult, SyncStatus
+from modules.workflow import WorkflowManager, WorkflowOrchestrator
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
+
+
+class StubDedupService:
+    def __init__(self) -> None:
+        self.started = False
+
+    async def start(self) -> bool:
+        self.started = not self.started
+        return self.started
+
+    async def wait_for_completion(self) -> None:  # pragma: no cover - simple stub
+        return None
+
+    def status(self) -> dict[str, object]:
+        return {
+            "running": False,
+            "total_files": 10,
+            "processed_files": 10,
+            "duplicate_files": 1,
+            "error": None,
+            "last_processed": "example.jpg",
+        }
+
+
+class StubBatchService:
+    def create_batch(self) -> BatchCreationResult:
+        return BatchCreationResult(
+            created=True,
+            batch_id=1,
+            batch_name="batch_001",
+            file_count=3,
+            size_bytes=123,
+            manifest_path="/tmp/manifest.json",
+        )
+
+
+class StubSyncService:
+    def __init__(self) -> None:
+        self._status_calls = 0
+        self.folder_id = "stub-folder"
+        self.device_id = "stub-device"
+        self.last_error: str | None = None
+
+    def start(self, batch_name: str) -> SyncStartResult:
+        return SyncStartResult(batch=batch_name, started=True, status="SYNCING")
+
+    def status(self, batch_name: str) -> SyncStatus:
+        self._status_calls += 1
+        if self._status_calls >= 2:
+            return SyncStatus(batch=batch_name, status="SYNCED", progress=100.0, synced_at="now")
+        return SyncStatus(batch=batch_name, status="SYNCING", progress=50.0, synced_at=None)
+
+    def refresh_syncing_batches(self) -> list[dict[str, object]]:
+        return [
+            {
+                "batch_id": 1,
+                "batch": "batch_001",
+                "status": "SYNCED" if self._status_calls >= 2 else "SYNCING",
+                "progress": 100.0 if self._status_calls >= 2 else 50.0,
+                "synced_at": "now" if self._status_calls >= 2 else None,
+                "detail": None,
+            }
+        ]
+
+    def syncthing_snapshot(self, *, phase: str | None = None) -> dict[str, Any]:
+        return {"timestamp": "now", "phase": phase}
+
+
+class StubSortService:
+    def start(self, batch_name: str) -> SortResult:
+        return SortResult(batch=batch_name, sorted_files=3, skipped_files=0, started=True)
+
+
+class StubCleanupService:
+    def run(self) -> CleanupReport:
+        return CleanupReport(
+            removed_batch_dirs=["/tmp/batch_001"],
+            deleted_temp_files=[],
+            rotated_logs=[],
+        )
+
+
+class BlockingBatchService:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def create_batch(self) -> BatchCreationResult:
+        self.calls += 1
+        if self.calls == 1:
+            return BatchCreationResult(
+                created=False,
+                reason="Batch 'batch_001' is still synced",
+                blocking_batch="batch_001",
+                blocking_batch_id=1,
+                blocking_status=BATCH_STATUS_SYNCED,
+            )
+        return BatchCreationResult(
+            created=True,
+            batch_id=2,
+            batch_name="batch_002",
+            file_count=1,
+            size_bytes=42,
+            manifest_path="/tmp/batch_002/manifest.json",
+        )
+
+
+class RecordingSortService(StubSortService):
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def start(self, batch_name: str) -> SortResult:
+        self.calls.append(batch_name)
+        return SortResult(batch=batch_name, sorted_files=1, skipped_files=0, started=True)
+
+
+class SequencingDatabase:
+    def fetchall(self, query: str, params: tuple[object, ...] | None = None):
+        if "FROM batches" in query:
+            return [
+                {
+                    "id": 1,
+                    "name": "batch_001",
+                    "status": BATCH_STATUS_SYNCED,
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "synced_at": "2024-01-01T00:05:00Z",
+                    "sorted_at": None,
+                    "manifest_path": "/tmp/batch_001/manifest.json",
+                },
+                {
+                    "id": 2,
+                    "name": "batch_002",
+                    "status": BATCH_STATUS_PENDING,
+                    "created_at": "2024-01-02T00:00:00Z",
+                    "synced_at": None,
+                    "sorted_at": None,
+                    "manifest_path": "/tmp/batch_002/manifest.json",
+                },
+            ]
+        return [{"status": "UNIQUE", "count": 2}]
+
+    def fetchone(self, query: str, params: tuple[object, ...] | None = None):
+        if "WHERE id = ?" in query and params:
+            batch_id = int(params[0])
+            if batch_id == 1:
+                return {"id": 1, "name": "batch_001", "status": BATCH_STATUS_SYNCED}
+            if batch_id == 2:
+                return {"id": 2, "name": "batch_002", "status": BATCH_STATUS_PENDING}
+        return None
+
+    def execute(self, *args, **kwargs):  # pragma: no cover - not used in assertions
+        class _Cursor:
+            def close(self_nonlocal) -> None:  # noqa: D401 - simple stub
+                return None
+
+        return _Cursor()
+
+
+class StubDatabase:
+    def fetchall(self, query: str, params: tuple[object, ...] | None = None):
+        if "FROM batches" in query:
+            return [
+                {
+                    "id": 1,
+                    "name": "batch_001",
+                    "status": "SYNCED",
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "synced_at": "2024-01-01T00:10:00Z",
+                    "sorted_at": "2024-01-01T00:20:00Z",
+                    "manifest_path": "/tmp/manifest.json",
+                }
+            ]
+        return [{"status": "UNIQUE", "count": 3}, {"status": "SORTED", "count": 5}]
+
+    def fetchone(self, query: str, params: tuple[object, ...] | None = None):
+        if "WHERE id = ?" in query:
+            return {"id": 1, "name": "batch_001", "status": "SYNCED"}
+        return None
+
+
+def build_stub_orchestrator() -> WorkflowOrchestrator:
+    container = SimpleNamespace(
+        config={
+            "system": {"log_dir": "/var/log/media-pipeline"},
+            "syncthing": {"api_url": "http://127.0.0.1:8384/rest"},
+        },
+        config_path=Path("/etc/media-pipeline/config.yaml"),
+        database=StubDatabase(),
+        dedup_service=StubDedupService(),
+        batch_service=StubBatchService(),
+        sync_service=StubSyncService(),
+        sort_service=StubSortService(),
+        cleanup_service=StubCleanupService(),
+        workflow_settings={
+            "debug": {"enabled": False, "auto_advance": False, "step_timeout_sec": 0},
+            "delays": {"syncthing_settle_sec": 0, "post_sync_sec": 0},
+            "trace": {"syncthing_samples": 5},
+        },
+    )
+    return WorkflowOrchestrator(container)  # type: ignore[arg-type]
+
+
+@pytest.mark.anyio
+async def test_workflow_orchestrator_pipeline_happy_path():
+    orchestrator = build_stub_orchestrator()
+    result = await orchestrator.run_pipeline()
+
+    assert not result.errors
+    assert any(step.name == "dedup" for step in result.steps)
+    assert any(step.name == "batch" and step.status == "completed" for step in result.steps)
+    assert any(step.name == "sync" and step.data.get("status") == "SYNCED" for step in result.steps)
+    assert any(step.name == "sort" and step.status == "completed" for step in result.steps)
+    assert any(step.name == "cleanup" for step in result.steps)
+
+
+@pytest.mark.anyio
+async def test_workflow_orchestrator_overview_includes_last_run():
+    orchestrator = build_stub_orchestrator()
+    last_run = await orchestrator.run_pipeline()
+    overview = orchestrator.build_overview(last_run=last_run, running=False)
+
+    assert overview["dedup"]["processed_files"] == 10
+    assert overview["recent_batches"][0]["name"] == "batch_001"
+    assert overview["file_counts"]["SORTED"] == 5
+    assert overview["last_run"]["steps"]
+    assert overview["config"]["path"].endswith("config.yaml")
+    assert overview["syncing_batches"]
+
+
+@pytest.mark.anyio
+async def test_workflow_retries_batch_after_sorting_blocking_synced_batch():
+    batch_service = BlockingBatchService()
+    sort_service = RecordingSortService()
+    container = SimpleNamespace(
+        config={"system": {"log_dir": "/var/log/media-pipeline"}},
+        config_path=Path("/etc/media-pipeline/config.yaml"),
+        database=SequencingDatabase(),
+        dedup_service=StubDedupService(),
+        batch_service=batch_service,
+        sync_service=StubSyncService(),
+        sort_service=sort_service,
+        cleanup_service=StubCleanupService(),
+        workflow_settings={
+            "debug": {"enabled": False, "auto_advance": False, "step_timeout_sec": 0},
+            "delays": {"syncthing_settle_sec": 0, "post_sync_sec": 0},
+            "trace": {"syncthing_samples": 5},
+        },
+    )
+    orchestrator = WorkflowOrchestrator(container)  # type: ignore[arg-type]
+
+    result = await orchestrator.run_pipeline()
+
+    assert batch_service.calls >= 2
+    assert "batch_001" in sort_service.calls
+    assert any(step.name == "batch" and step.status == "completed" for step in result.steps)
+    assert any(step.name == "sort" and step.data.get("batch") == "batch_001" for step in result.steps)
+
+
+class FakeManager:
+    def __init__(self) -> None:
+        orchestrator = build_stub_orchestrator()
+        self._manager = WorkflowManager(orchestrator)
+
+    async def trigger(self) -> bool:
+        return True
+
+    def status(self) -> dict[str, object]:
+        return {
+            "running": False,
+            "last_result": None,
+            "error": None,
+            "debug": {
+                "enabled": False,
+                "waiting": False,
+                "current_step": None,
+                "last_step": None,
+                "history": [],
+                "note": None,
+                "settings": {"auto_advance": False, "step_timeout_sec": 0},
+            },
+        }
+
+    def overview(self) -> dict[str, object]:
+        return {
+            "running": False,
+            "dedup": {"running": False},
+            "recent_batches": [],
+            "file_counts": {},
+            "config": {
+                "path": "/etc/media-pipeline/config.yaml",
+                "log_dir": "/var/log/media-pipeline",
+                "syncthing": {
+                    "api_url": "http://127.0.0.1:8384/rest",
+                    "folder_id": None,
+                    "device_id": None,
+                    "last_error": None,
+                },
+            },
+        }
+
+    @property
+    def orchestrator(self) -> WorkflowOrchestrator:
+        return self._manager.orchestrator
+
+    def advance_debug(self) -> dict[str, object]:
+        return self.status()["debug"]
+
+
+@pytest.mark.anyio
+async def test_workflow_router_endpoints():
+    fake_manager = FakeManager()
+
+    assert await run_workflow(fake_manager) == {"started": True}
+
+    status_payload = await workflow_status(fake_manager)
+    assert status_payload["running"] is False
+
+    overview_payload = await workflow_overview(fake_manager)
+    assert "dedup" in overview_payload
+
+    sync_payload = await workflow_sync(1, fake_manager)
+    assert sync_payload["status"] in {"completed", "warning", "error"}
+
+    sort_payload = await workflow_sort(1, fake_manager)
+    assert sort_payload["status"] == "completed"
+
+    refresh_payload = await workflow_sync_refresh(fake_manager)
+    assert "batches" in refresh_payload
+
+    debug_payload = await workflow_debug_advance(fake_manager)
+    assert debug_payload["enabled"] is False
+
+
+@pytest.mark.anyio
+async def test_workflow_manager_debug_waits_for_confirmation():
+    orchestrator = build_stub_orchestrator()
+    orchestrator.container.workflow_settings["debug"]["enabled"] = True  # type: ignore[attr-defined]
+    manager = WorkflowManager(orchestrator)
+
+    started = await manager.trigger()
+    assert started is True
+
+    # Step through each confirmation
+    while manager._current_task and not manager._current_task.done():  # type: ignore[attr-defined]
+        state = manager.status()["debug"]
+        if state.get("waiting"):
+            manager.advance_debug()
+        await asyncio.sleep(0.05)
+
+    assert manager._last_result is not None  # type: ignore[attr-defined]
+    debug_state = manager.debug_state()
+    assert debug_state["history"]
+    assert debug_state["waiting"] is False
+

@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from modules.batch import (
     BATCH_STATUS_SORTED,
     BATCH_STATUS_SYNCED,
+    FILE_STATUS_ARCHIVED,
     FILE_STATUS_SORTED,
     FILE_STATUS_SYNCED,
 )
@@ -124,5 +125,53 @@ def test_sort_service_moves_files(tmp_path: Path) -> None:
 
     second = service.start("batch_001")
     assert second.started is False
+
+    db.close()
+
+
+def test_sort_service_copy_mode_retains_batch(tmp_path: Path) -> None:
+    db = DatabaseManager(tmp_path / "db.sqlite")
+    batch_dir = tmp_path / "batches"
+    sorted_dir = tmp_path / "sorted"
+    batch_path = batch_dir / "batch_002"
+    batch_path.mkdir(parents=True, exist_ok=True)
+
+    image_path = batch_path / "photo.jpg"
+    capture_time = datetime(2022, 6, 1, 9, 0, tzinfo=timezone.utc)
+    _write_exif_image(image_path, capture_time)
+
+    batch_id = _insert_batch(db, "batch_002", BATCH_STATUS_SYNCED)
+    _insert_file(db, path=image_path, batch_id=batch_id)
+
+    service = SortService(
+        db,
+        batch_dir=batch_dir,
+        sorted_dir=sorted_dir,
+        transfer_mode="copy",
+    )
+
+    result = service.start("batch_002")
+    assert result.started is True
+    assert result.sorted_files == 1
+
+    destination = sorted_dir / "2022/06/01/photo.jpg"
+    assert destination.exists()
+    # Original file in the batch directory should remain because of copy mode.
+    assert image_path.exists()
+
+    rows = db.fetchall(
+        "SELECT path, status, batch_id, target_path FROM files WHERE batch_id = ? OR status = ?",
+        (batch_id, FILE_STATUS_ARCHIVED),
+    )
+
+    archived = [row for row in rows if row["status"] == FILE_STATUS_ARCHIVED]
+    assert archived
+    for row in archived:
+        assert row["batch_id"] is None
+        assert row["path"] == str(image_path)
+        assert row["target_path"] == str(destination)
+
+    sorted_rows = [row for row in rows if row["status"] == FILE_STATUS_SORTED]
+    assert sorted_rows and sorted_rows[0]["path"] == str(destination)
 
     db.close()

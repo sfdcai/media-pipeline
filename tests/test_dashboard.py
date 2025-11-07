@@ -57,8 +57,13 @@ def test_dashboard_summary_returns_totals(tmp_path: Path) -> None:
 
     assert summary.files["total"] == 2
     assert summary.files["total_size_bytes"] == 125
+    assert summary.files["completion_percent"] >= 50
     assert summary.batches["total"] == 1
+    assert summary.batches["completion_percent"] in {0.0, 100.0}
     assert summary.storage["sorted_dir_bytes"] >= 10
+    assert summary.recent_batches
+    assert summary.recent_batches[0]["id"] == batch_id
+    assert summary.recent_batches[0]["status"] == BATCH_STATUS_SYNCED
     assert hasattr(summary, "generated_at")
 
     db.close()

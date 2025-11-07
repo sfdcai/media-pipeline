@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, MutableMapping, Tuple
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 
+from utils.application_state import install_container
 from utils.config_loader import (
     load_config,
     load_raw_config,
@@ -16,6 +17,7 @@ from utils.config_loader import (
     resolve_config_path,
     save_config,
 )
+from utils.service_container import build_service_container
 from utils.db_manager import DatabaseManager
 
 router = APIRouter(prefix="/api/config", tags=["config"])
@@ -57,7 +59,10 @@ def get_actor(request: Request) -> str:
     return request.headers.get("X-Actor", "api")
 
 
-def get_config_path() -> Path:
+def get_config_path(request: Request) -> Path:
+    stored = getattr(request.app.state, "config_path", None)
+    if stored:
+        return Path(stored)
     return resolve_config_path()
 
 
@@ -74,6 +79,7 @@ async def read_config(config_path: Path = Depends(get_config_path)) -> Dict[str,
 
 @router.put("", response_model=Dict[str, Any])
 async def update_config(
+    request: Request,
     updates: Dict[str, Any] = Body(..., embed=False),
     db: DatabaseManager = Depends(get_database),
     config_path: Path = Depends(get_config_path),
@@ -118,6 +124,9 @@ async def update_config(
             "INSERT INTO config_changes (ts, key, old_value, new_value, actor) VALUES (?, ?, ?, ?, ?)",
             rows,
         )
+
+    container = build_service_container(updated_effective, config_path=config_path)
+    install_container(request.app, container)
 
     return updated_effective
 

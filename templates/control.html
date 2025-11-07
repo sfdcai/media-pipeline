@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Media Pipeline Control Center</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 0;
+        background: #f5f6fa;
+        color: #1f2933;
+      }
+      header {
+        background: #1b4b91;
+        color: white;
+        padding: 1.5rem 2rem;
+      }
+      main {
+        display: grid;
+        gap: 1.5rem;
+        padding: 2rem;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      }
+      section {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+      }
+      h1, h2, h3 {
+        margin-top: 0;
+      }
+      button,
+      textarea,
+      select {
+        font: inherit;
+      }
+      button {
+        background: #1b4b91;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 0.6rem 1rem;
+        cursor: pointer;
+        margin: 0.25rem 0.25rem 0.25rem 0;
+        transition: background 0.2s ease-in-out;
+      }
+      button.secondary {
+        background: #475569;
+      }
+      button:disabled {
+        background: #94a3b8;
+        cursor: not-allowed;
+      }
+      button:hover:not(:disabled) {
+        background: #163b72;
+      }
+      .link-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin: 0.75rem 0 0;
+      }
+      .url-display {
+        margin-top: 0.75rem;
+        font-size: 0.85rem;
+        color: #334155;
+      }
+      .url-display p {
+        margin: 0.2rem 0;
+      }
+      a.link-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #2563eb;
+        color: white;
+        text-decoration: none;
+        padding: 0.55rem 0.85rem;
+        border-radius: 6px;
+        transition: background 0.2s ease-in-out;
+      }
+      a.link-button.secondary-link {
+        background: #475569;
+      }
+      a.link-button:hover {
+        background: #1d4ed8;
+      }
+      a.link-button.secondary-link:hover {
+        background: #334155;
+      }
+      select {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        border: 1px solid #cbd5e1;
+        background: #ffffff;
+        margin-top: 0.5rem;
+      }
+      textarea {
+        width: 100%;
+        height: 260px;
+        border-radius: 8px;
+        border: 1px solid #cbd5e1;
+        padding: 0.75rem;
+        resize: vertical;
+        background: #f8fafc;
+      }
+      pre {
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 1rem;
+        border-radius: 8px;
+        overflow-x: auto;
+        font-size: 0.9rem;
+      }
+      ul {
+        padding-left: 1.1rem;
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border-radius: 999px;
+        padding: 0.25rem 0.75rem;
+        background: #e2e8f0;
+        color: #0f172a;
+        font-size: 0.85rem;
+      }
+      .status-pill.running {
+        background: #22c55e33;
+        color: #166534;
+      }
+      .status-pill.error {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      .grid-two {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .card-grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+      .card {
+        background: #e2e8f0;
+        border-radius: 10px;
+        padding: 1rem;
+      }
+      .step-list {
+        display: grid;
+        gap: 0.75rem;
+      }
+      .step {
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 0.75rem;
+        background: #f8fafc;
+      }
+      .flow-grid {
+        display: grid;
+        gap: 0.75rem;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+      .flow-step {
+        border-radius: 10px;
+        border: 1px solid #cbd5e1;
+        padding: 0.9rem;
+        background: #ffffff;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+        transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+      }
+      .flow-step .step-title {
+        font-weight: 600;
+        margin-bottom: 0.35rem;
+      }
+      .flow-step.completed {
+        border-color: #0f766e;
+        box-shadow: 0 2px 10px rgba(15, 118, 110, 0.15);
+      }
+      .flow-step.warning {
+        border-color: #b45309;
+        box-shadow: 0 2px 10px rgba(180, 83, 9, 0.15);
+      }
+      .flow-step.error {
+        border-color: #b91c1c;
+        box-shadow: 0 2px 10px rgba(185, 28, 28, 0.15);
+      }
+      .flow-step.skipped {
+        border-color: #94a3b8;
+        opacity: 0.8;
+      }
+      .timeline-entry {
+        border-left: 3px solid #1b4b91;
+        padding: 0.5rem 0.75rem;
+        background: #f1f5f9;
+        border-radius: 6px;
+      }
+      .timeline-entry strong {
+        display: block;
+        margin-bottom: 0.25rem;
+      }
+      .progress-bar {
+        width: 100%;
+        height: 10px;
+        background: #e2e8f0;
+        border-radius: 999px;
+        overflow: hidden;
+        margin: 0.5rem 0 0.4rem;
+      }
+      .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #1b4b91, #2563eb);
+        border-radius: 999px;
+        transition: width 0.3s ease;
+      }
+      .syncing-item {
+        border: 1px solid #94a3b8;
+        border-radius: 10px;
+        padding: 0.9rem;
+        background: #f1f5f9;
+      }
+      .syncing-item h4 {
+        margin: 0 0 0.3rem;
+      }
+      .syncing-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.6rem;
+        font-size: 0.85rem;
+        color: #475569;
+      }
+      footer {
+        text-align: center;
+        padding: 1rem 2rem 2rem;
+        color: #64748b;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Media Pipeline Control Center</h1>
+      <p>Review configuration, run modules, and monitor workflow status.</p>
+    </header>
+    <main>
+      <section>
+        <h2>Quick Actions</h2>
+        <p>Kick off the entire workflow or run individual modules on-demand.</p>
+        <div id="quick-action-buttons">
+          <button id="run-workflow">Run Complete Workflow</button>
+          <button class="secondary" data-action="dedup">Run Dedup</button>
+          <button class="secondary" data-action="batch">Create Batch</button>
+          <button class="secondary" data-action="sync">Start Sync</button>
+          <button class="secondary" data-action="sort">Sort Batch</button>
+          <button class="secondary" data-action="cleanup">Run Cleanup</button>
+          <button class="secondary" id="refresh-syncing">Refresh Sync Progress</button>
+        </div>
+        <div class="link-row">
+          <a
+            id="dashboard-link"
+            class="link-button"
+            target="_blank"
+            rel="noopener"
+            href="/dashboard"
+            >Open Dashboard</a
+          >
+          <a
+            id="dbui-link"
+            class="link-button secondary-link"
+            target="_blank"
+            rel="noopener"
+            href="#"
+            >Open Database UI</a
+          >
+          <a
+            id="api-docs-link"
+            class="link-button secondary-link"
+            target="_blank"
+            rel="noopener"
+            href="/docs"
+            >API Docs</a
+          >
+        </div>
+        <div class="url-display">
+          <p><strong>Dashboard:</strong> <span id="dashboard-url-display">Loading…</span></p>
+          <p><strong>Control:</strong> <span id="control-url-display">Loading…</span></p>
+          <p><strong>Database UI:</strong> <span id="dbui-url-display">Loading…</span></p>
+        </div>
+        <div class="link-row">
+          <button class="secondary" id="copy-config-path">Copy Config Path</button>
+          <button class="secondary" id="refresh-overview">Refresh Overview</button>
+        </div>
+        <p
+          id="link-message"
+          style="margin-top: 0.5rem; font-size: 0.85rem; color: #475569"
+        ></p>
+        <p
+          id="sync-message"
+          style="margin-top: 0.2rem; font-size: 0.85rem; color: #475569"
+        ></p>
+        <div style="margin-top: 1rem">
+          <label for="batch-selector" style="font-weight: 600"
+            >Target batch for sync/sort</label
+          >
+          <select id="batch-selector">
+            <option value="">Select a batch…</option>
+          </select>
+          <p style="font-size: 0.85rem; color: #475569; margin-top: 0.35rem">
+            The list shows the five most recent batches. Create a new batch first if
+            none appear.
+          </p>
+        </div>
+        <div id="workflow-status" class="status-pill" style="margin-top: 1rem">
+          Loading status…
+        </div>
+      </section>
+
+      <section>
+        <h2>Configuration</h2>
+        <p>Edit the configuration safely and push updates instantly.</p>
+        <textarea id="config-editor" spellcheck="false"></textarea>
+        <div style="margin-top: 0.75rem">
+          <button id="save-config">Save Configuration</button>
+          <button class="secondary" id="reset-config">Reset</button>
+        </div>
+        <p id="config-message" style="margin-top: 0.75rem; color: #166534"></p>
+      </section>
+
+      <section>
+        <h2>Current Snapshot</h2>
+        <div class="card-grid" style="margin-bottom: 1rem">
+          <div class="card">
+            <h3 style="margin-bottom: 0.35rem">Deduplication</h3>
+            <pre id="dedup-status" style="height: 140px">Loading…</pre>
+          </div>
+          <div class="card">
+            <h3 style="margin-bottom: 0.35rem">File Counts</h3>
+            <pre id="file-counts" style="height: 140px">Loading…</pre>
+          </div>
+          <div class="card">
+            <h3 style="margin-bottom: 0.35rem">Debug Mode</h3>
+            <p id="debug-status-text" style="font-size: 0.9rem; line-height: 1.4">
+              Loading debug state…
+            </p>
+            <button id="debug-advance" class="secondary" disabled>
+              Continue to next step
+            </button>
+            <pre id="debug-history" style="height: 140px; margin-top: 0.75rem">
+No debug history yet.
+            </pre>
+          </div>
+          <div class="card">
+            <h3 style="margin-bottom: 0.35rem">Configuration</h3>
+            <pre id="config-summary" style="height: 140px">Loading…</pre>
+          </div>
+          <div class="card">
+            <h3 style="margin-bottom: 0.35rem">Syncthing</h3>
+            <pre id="syncthing-summary" style="height: 140px">Loading…</pre>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Pipeline Flow</h2>
+        <p style="margin-top: -0.3rem; color: #475569; font-size: 0.9rem">
+          Visualise the most recent workflow run and the status of each step.
+        </p>
+        <div id="flow-view" class="flow-grid">
+          <p>Waiting for workflow execution…</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>Recent Batches</h2>
+        <ul id="batch-list">
+          <li>Loading…</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Active Sync Progress</h2>
+        <p style="margin-top: -0.3rem; color: #475569">
+          Track batches still marked as syncing. Use the Refresh Sync Progress button to
+          force a poll of Syncthing when progress appears stalled.
+        </p>
+        <div id="syncing-list" class="step-list">
+          <p>No batches are currently marked as syncing.</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>Last Workflow Run</h2>
+        <div id="last-run" class="step-list">
+          <p>No workflow has been executed yet.</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>Syncthing Timeline</h2>
+        <p style="margin-top: -0.3rem; color: #475569; font-size: 0.9rem">
+          Inspect recent Syncthing snapshots captured during the last sync step.
+        </p>
+        <div id="syncthing-timeline" class="step-list">
+          <p>Timeline available after the next sync run.</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>Syncthing Diagnostics</h2>
+        <p>
+          Capture live status straight from Syncthing when troubleshooting sync issues.
+        </p>
+        <div class="link-row">
+          <button id="syncthing-refresh">Run Diagnostics</button>
+          <button class="secondary" id="syncthing-open">Open Syncthing UI</button>
+        </div>
+        <p
+          id="syncthing-status"
+          style="margin-top: 0.65rem; font-size: 0.9rem; color: #475569"
+        >
+          Diagnostics not run yet.
+        </p>
+        <pre id="syncthing-info" style="min-height: 160px">Press "Run Diagnostics" to query Syncthing.</pre>
+      </section>
+    </main>
+    <footer>
+      Tip: the interactive CLI is available via <code>scripts/workflow.py</code>.
+    </footer>
+
+    <script>
+      const statusPill = document.getElementById("workflow-status");
+      const configEditor = document.getElementById("config-editor");
+      const configMessage = document.getElementById("config-message");
+      const batchSelector = document.getElementById("batch-selector");
+      const configSummary = document.getElementById("config-summary");
+      const syncthingSummary = document.getElementById("syncthing-summary");
+      const linkMessage = document.getElementById("link-message");
+      const syncMessage = document.getElementById("sync-message");
+      const syncthingInfo = document.getElementById("syncthing-info");
+      const syncthingStatus = document.getElementById("syncthing-status");
+      const flowView = document.getElementById("flow-view");
+      const debugStatusText = document.getElementById("debug-status-text");
+      const debugAdvanceBtn = document.getElementById("debug-advance");
+      const debugHistory = document.getElementById("debug-history");
+      const syncthingTimeline = document.getElementById("syncthing-timeline");
+      const dashboardLink = document.getElementById("dashboard-link");
+      const dbuiLink = document.getElementById("dbui-link");
+      const syncthingOpenBtn = document.getElementById("syncthing-open");
+      const dashboardUrlDisplay = document.getElementById("dashboard-url-display");
+      const controlUrlDisplay = document.getElementById("control-url-display");
+      const dbuiUrlDisplay = document.getElementById("dbui-url-display");
+      const syncingList = document.getElementById("syncing-list");
+      const syncRefreshBtn = document.getElementById("refresh-syncing");
+      let lastConfigSnapshot = "";
+      let cachedConfig = null;
+      let overviewConfigMeta = null;
+      let syncthingUiUrl = "";
+      let pollTimer = null;
+
+      async function apiRequest(path, options = {}) {
+        const response = await fetch(path, {
+          headers: { "content-type": "application/json" },
+          ...options,
+        });
+        if (!response.ok) {
+          const detail = await response.text();
+          throw new Error(detail || response.statusText);
+        }
+        if (response.status === 204) {
+          return null;
+        }
+        return await response.json();
+      }
+
+      function showLinkMessage(text, color = "#166534") {
+        linkMessage.textContent = text;
+        linkMessage.style.color = color;
+      }
+
+      function showSyncMessage(text, color = "#166534") {
+        syncMessage.textContent = text;
+        syncMessage.style.color = color;
+      }
+
+      function updateLinksFromConfig() {
+        const origin = window.location.origin;
+        const dashboardUrl = `${origin}/dashboard`;
+        dashboardLink.href = dashboardUrl;
+        dashboardUrlDisplay.textContent = dashboardUrl;
+        const controlUrl = `${origin}/control`;
+        controlUrlDisplay.textContent = controlUrl;
+        const protocol = window.location.protocol;
+        const hostname =
+          window.location.hostname || window.location.host.split(":")[0];
+        let dbuiPort = 8081;
+        if (cachedConfig?.system?.port_dbui) {
+          dbuiPort = cachedConfig.system.port_dbui;
+        }
+        const dbuiUrl = `${protocol}//${hostname}:${dbuiPort}`;
+        dbuiLink.href = dbuiUrl;
+        dbuiLink.title = `Open sqlite-web at ${dbuiUrl}`;
+        dbuiUrlDisplay.textContent = dbuiUrl;
+        const apiUrlCandidate =
+          cachedConfig?.syncthing?.api_url ||
+          overviewConfigMeta?.syncthing?.api_url ||
+          "";
+        if (apiUrlCandidate) {
+          syncthingUiUrl = apiUrlCandidate
+            .replace(/\/$/, "")
+            .replace(/\/rest$/, "");
+        } else {
+          syncthingUiUrl = "";
+        }
+        syncthingOpenBtn.disabled = !syncthingUiUrl;
+        syncthingOpenBtn.title = syncthingUiUrl
+          ? `Open Syncthing UI (${syncthingUiUrl})`
+          : "Set syncthing.api_url to enable shortcut";
+      }
+
+      function updateConfigSummary() {
+        if (!overviewConfigMeta) {
+          configSummary.textContent = "Configuration metadata unavailable.";
+          syncthingSummary.textContent = "Syncthing metadata unavailable.";
+          return;
+        }
+        const summary = {
+          path: overviewConfigMeta.path,
+          log_dir: overviewConfigMeta.log_dir,
+        };
+        configSummary.textContent = JSON.stringify(summary, null, 2);
+
+        const syncthingMeta = overviewConfigMeta.syncthing || {};
+        const syncthingData = {
+          api_url: syncthingMeta.api_url || "",
+          folder_id: syncthingMeta.folder_id || null,
+          device_id: syncthingMeta.device_id || null,
+          last_error: syncthingMeta.last_error || null,
+        };
+        syncthingSummary.textContent = JSON.stringify(syncthingData, null, 2);
+
+        if (syncthingMeta.last_error) {
+          syncthingStatus.textContent = `Syncthing warning: ${syncthingMeta.last_error}`;
+          syncthingStatus.style.color = "#991b1b";
+        } else {
+          syncthingStatus.textContent =
+            "Syncthing ready (no recent errors reported).";
+          syncthingStatus.style.color = "#166534";
+        }
+
+        renderFlow(overview);
+        renderSyncthingTimeline(overview.last_run?.steps || []);
+      }
+
+      function renderSyncingBatches(batches) {
+        syncingList.innerHTML = "";
+        if (!batches || batches.length === 0) {
+          syncingList.innerHTML = "<p>All caught up — no batches are syncing.</p>";
+          return;
+        }
+
+        batches.forEach((entry) => {
+          const progress = Math.max(
+            0,
+            Math.min(100, Number(entry.progress ?? 0))
+          );
+          const wrapper = document.createElement("div");
+          wrapper.className = "syncing-item";
+          const badge = entry.batch_id
+            ? ` (#${entry.batch_id})`
+            : "";
+          const detailMarkup = entry.detail
+            ? `<p style="margin-top:0.4rem;color:#991b1b;">${entry.detail}</p>`
+            : "";
+          let syncthingDetails = "";
+          if (entry.syncthing) {
+            const state = entry.syncthing.state ?? "unknown";
+            const needItems = entry.syncthing.need_items ?? entry.syncthing.needItems;
+            const needBytes = entry.syncthing.need_bytes ?? entry.syncthing.needBytes;
+            const parts = [`State: ${state}`];
+            if (typeof needItems === "number") {
+              parts.push(`Need items: ${needItems}`);
+            }
+            if (typeof needBytes === "number") {
+              parts.push(`Need bytes: ${needBytes}`);
+            }
+            syncthingDetails = `<div class="syncing-meta" style="margin-top:0.35rem;">
+              ${parts.map((text) => `<span>${text}</span>`).join("")}
+            </div>`;
+          }
+          const syncedAt = entry.synced_at
+            ? `<span>Synced at: ${entry.synced_at}</span>`
+            : "";
+          wrapper.innerHTML = `
+            <h4>${entry.batch}${badge}</h4>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: ${progress}%"></div>
+            </div>
+            <div class="syncing-meta">
+              <span>Status: ${entry.status}</span>
+              <span>Progress: ${progress.toFixed(1)}%</span>
+              ${syncedAt}
+            </div>
+            ${detailMarkup}
+            ${syncthingDetails}
+          `;
+          syncingList.appendChild(wrapper);
+        });
+      }
+
+      function renderFlow(overview) {
+        if (!flowView) return;
+        flowView.innerHTML = "";
+
+        if (!overview.last_run || !overview.last_run.steps?.length) {
+          flowView.innerHTML = "<p>Run the workflow to populate the flow.</p>";
+          return;
+        }
+
+        const order = ["dedup", "batch", "sync", "sort", "cleanup"];
+        const map = new Map((overview.last_run.steps || []).map((step) => [step.name, step]));
+
+        order.forEach((name, index) => {
+          const step = map.get(name);
+          const status = step?.status || "skipped";
+          const card = document.createElement("div");
+          card.className = `flow-step ${status}`;
+
+          const title = document.createElement("div");
+          title.className = "step-title";
+          title.textContent = `${index + 1}. ${name.toUpperCase()}`;
+          card.appendChild(title);
+
+          const statusLine = document.createElement("div");
+          statusLine.style.fontSize = "0.9rem";
+          statusLine.textContent = `Status: ${status}`;
+          card.appendChild(statusLine);
+
+          if (step?.message) {
+            const note = document.createElement("p");
+            note.style.margin = "0.4rem 0 0";
+            note.style.color = status === "completed" ? "#475569" : "#b45309";
+            note.textContent = step.message;
+            card.appendChild(note);
+          }
+
+          const data = step?.data || {};
+          const details = [];
+          switch (name) {
+            case "dedup":
+              if (typeof data.processed_files === "number") {
+                details.push(`Processed: ${data.processed_files}`);
+              }
+              if (typeof data.duplicate_files === "number") {
+                details.push(`Duplicates: ${data.duplicate_files}`);
+              }
+              break;
+            case "batch":
+              if (data.batch_name) details.push(`Batch: ${data.batch_name}`);
+              if (typeof data.file_count === "number") {
+                details.push(`Files: ${data.file_count}`);
+              }
+              if (data.reason) details.push(`Reason: ${data.reason}`);
+              break;
+            case "sync":
+              if (typeof data.progress === "number") {
+                details.push(`Progress: ${Number(data.progress).toFixed(1)}%`);
+              }
+              if (data.synced_at) details.push(`Synced at: ${data.synced_at}`);
+              if (data.reason) details.push(`Reason: ${data.reason}`);
+              break;
+            case "sort":
+              if (typeof data.sorted_files === "number") {
+                details.push(`Sorted files: ${data.sorted_files}`);
+              }
+              if (typeof data.skipped_files === "number") {
+                details.push(`Skipped files: ${data.skipped_files}`);
+              }
+              if (data.reason) details.push(`Reason: ${data.reason}`);
+              break;
+            case "cleanup":
+              if (Array.isArray(data.removed_batch_dirs)) {
+                details.push(`Removed batches: ${data.removed_batch_dirs.length}`);
+              }
+              if (Array.isArray(data.deleted_temp_files)) {
+                details.push(`Temp files: ${data.deleted_temp_files.length}`);
+              }
+              break;
+          }
+
+          if (details.length) {
+            const list = document.createElement("ul");
+            list.style.margin = "0.5rem 0 0";
+            list.style.paddingLeft = "1rem";
+            list.style.fontSize = "0.85rem";
+            details.forEach((text) => {
+              const li = document.createElement("li");
+              li.textContent = text;
+              list.appendChild(li);
+            });
+            card.appendChild(list);
+          }
+
+          flowView.appendChild(card);
+        });
+      }
+
+      function renderSyncthingTimeline(steps) {
+        if (!syncthingTimeline) return;
+        syncthingTimeline.innerHTML = "";
+
+        const syncStep = steps.find((step) => step.name === "sync");
+        const trace = syncStep?.data?.syncthing_trace;
+        if (!Array.isArray(trace) || trace.length === 0) {
+          syncthingTimeline.innerHTML = "<p>Timeline available after the next sync run.</p>";
+          return;
+        }
+
+        const recent = trace.slice(-8);
+        recent.forEach((entry) => {
+          const container = document.createElement("div");
+          container.className = "timeline-entry";
+          const timestamp = entry.timestamp || new Date().toISOString();
+          const phase = entry.phase || "progress";
+          const state = entry.state ?? entry.status ?? "unknown";
+          const completion = typeof entry.completion === "number"
+            ? `${entry.completion.toFixed(1)}%`
+            : entry.progress !== undefined
+            ? `${Number(entry.progress).toFixed(1)}%`
+            : "-";
+          const needs = [];
+          if (typeof entry.need_items === "number") {
+            needs.push(`Need items: ${entry.need_items}`);
+          }
+          if (typeof entry.need_bytes === "number") {
+            needs.push(`Need bytes: ${entry.need_bytes}`);
+          }
+          container.innerHTML = `
+            <strong>${timestamp}</strong>
+            <div style="font-size:0.85rem;color:#475569">
+              <div>Phase: ${phase}</div>
+              <div>State: ${state}</div>
+              <div>Completion: ${completion}</div>
+              ${needs.length ? `<div>${needs.join(" · ")}</div>` : ""}
+            </div>
+          `;
+          syncthingTimeline.appendChild(container);
+        });
+      }
+
+      function renderDebugState(debug) {
+        if (!debugStatusText || !debugAdvanceBtn) return;
+        const enabled = Boolean(debug?.enabled);
+        const waiting = Boolean(debug?.waiting);
+        if (!enabled) {
+          debugStatusText.textContent = "Debug mode is disabled. Enable it in the configuration to pause between steps.";
+          debugAdvanceBtn.disabled = true;
+        } else if (waiting) {
+          const stepName = debug.current_step ? debug.current_step.toUpperCase() : "UNKNOWN";
+          debugStatusText.textContent = `Paused after ${stepName}. Review the step details, then continue when ready.`;
+          debugAdvanceBtn.disabled = false;
+        } else {
+          debugStatusText.textContent = "Debug mode enabled. Waiting for the next step.";
+          debugAdvanceBtn.disabled = true;
+        }
+
+        if (debug?.history?.length) {
+          const recent = debug.history.slice(-5);
+          debugHistory.textContent = JSON.stringify(recent, null, 2);
+        } else {
+          debugHistory.textContent = "No debug history yet.";
+        }
+
+        if (debug?.note) {
+          showLinkMessage(debug.note, "#b45309");
+        }
+      }
+
+      async function refreshAll(manual = false) {
+        try {
+          const [overview, status] = await Promise.all([
+            apiRequest("/api/workflow/overview"),
+            apiRequest("/api/workflow/status"),
+          ]);
+          renderOverview(overview);
+          renderDebugState(status.debug || {});
+          if (manual) {
+            showLinkMessage("Overview refreshed.");
+          }
+        } catch (error) {
+          console.error(error);
+          statusPill.textContent = `Status unavailable: ${error.message}`;
+          statusPill.className = "status-pill error";
+          showLinkMessage(`Overview refresh failed: ${error.message}`, "#991b1b");
+        }
+      }
+
+      function renderOverview(overview) {
+        statusPill.textContent = overview.running
+          ? "Workflow running"
+          : "Workflow idle";
+        statusPill.className = overview.running
+          ? "status-pill running"
+          : "status-pill";
+
+        const dedup = document.getElementById("dedup-status");
+        dedup.textContent = JSON.stringify(overview.dedup, null, 2);
+
+        const counts = document.getElementById("file-counts");
+        counts.textContent = JSON.stringify(overview.file_counts, null, 2);
+
+        overviewConfigMeta = overview.config || overviewConfigMeta;
+        updateConfigSummary();
+        updateLinksFromConfig();
+        renderSyncingBatches(overview.syncing_batches || []);
+
+        const batchList = document.getElementById("batch-list");
+        batchList.innerHTML = "";
+        batchSelector.innerHTML = '<option value="">Select a batch…</option>';
+        if (!overview.recent_batches.length) {
+          batchList.innerHTML = "<li>No batches yet.</li>";
+          batchSelector.disabled = true;
+        } else {
+          batchSelector.disabled = false;
+          for (const batch of overview.recent_batches) {
+            const item = document.createElement("li");
+            item.textContent = `#${batch.id} · ${batch.name} • ${batch.status}`;
+            const details = document.createElement("div");
+            details.style.fontSize = "0.85rem";
+            details.style.color = "#475569";
+            details.textContent = `created: ${batch.created_at || "-"} | synced: ${
+              batch.synced_at || "-"
+            } | sorted: ${batch.sorted_at || "-"}`;
+            item.appendChild(details);
+            batchList.appendChild(item);
+
+            const option = document.createElement("option");
+            option.value = batch.id;
+            option.textContent = `#${batch.id} – ${batch.name} (${batch.status})`;
+            batchSelector.appendChild(option);
+          }
+        }
+
+        const lastRun = document.getElementById("last-run");
+        lastRun.innerHTML = "";
+        if (!overview.last_run) {
+          lastRun.innerHTML = "<p>No workflow has been executed yet.</p>";
+        } else {
+          const meta = document.createElement("div");
+          meta.innerHTML = `<strong>Started:</strong> ${
+            overview.last_run.started_at
+          }<br/><strong>Finished:</strong> ${overview.last_run.finished_at}`;
+          lastRun.appendChild(meta);
+          for (const step of overview.last_run.steps) {
+            const div = document.createElement("div");
+            div.className = "step";
+            div.innerHTML = `<strong>${step.name.toUpperCase()}</strong><br/>Status: ${
+              step.status
+            }${step.message ? `<br/>${step.message}` : ""}`;
+            if (step.data) {
+              const pre = document.createElement("pre");
+              pre.textContent = JSON.stringify(step.data, null, 2);
+              div.appendChild(pre);
+            }
+            lastRun.appendChild(div);
+          }
+          if (overview.last_run.errors?.length) {
+            const errorList = document.createElement("div");
+            errorList.innerHTML = "<strong>Warnings</strong>";
+            const list = document.createElement("ul");
+            for (const err of overview.last_run.errors) {
+              const li = document.createElement("li");
+              li.textContent = err;
+              list.appendChild(li);
+            }
+            errorList.appendChild(list);
+            lastRun.appendChild(errorList);
+          }
+        }
+      }
+
+      async function loadConfig() {
+        try {
+          const config = await apiRequest("/api/config");
+          cachedConfig = config;
+          lastConfigSnapshot = JSON.stringify(config, null, 2);
+          configEditor.value = lastConfigSnapshot;
+          configMessage.textContent = "";
+          updateLinksFromConfig();
+        } catch (error) {
+          configEditor.value = "Unable to load configuration.";
+          configMessage.textContent = error.message;
+          configMessage.style.color = "#991b1b";
+          showLinkMessage(`Config load failed: ${error.message}`, "#991b1b");
+        }
+      }
+
+      async function saveConfig() {
+        try {
+          const payload = JSON.parse(configEditor.value);
+          const updated = await apiRequest("/api/config", {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          });
+          cachedConfig = updated;
+          lastConfigSnapshot = JSON.stringify(updated, null, 2);
+          configEditor.value = lastConfigSnapshot;
+          configMessage.textContent = "Configuration saved.";
+          configMessage.style.color = "#166534";
+          updateLinksFromConfig();
+          showLinkMessage("Configuration saved.");
+        } catch (error) {
+          configMessage.textContent = `Save failed: ${error.message}`;
+          configMessage.style.color = "#991b1b";
+          showLinkMessage(`Save failed: ${error.message}`, "#991b1b");
+        }
+      }
+
+      async function handleAction(action) {
+        try {
+          switch (action) {
+            case "dedup":
+              await apiRequest("/api/dedup/start", { method: "POST" });
+              break;
+            case "batch":
+              await apiRequest("/api/batch/create", { method: "POST" });
+              break;
+            case "sync": {
+              const batch = batchSelector.value;
+              if (!batch) {
+                alert("Select a batch first.");
+                return;
+              }
+              await apiRequest(`/api/workflow/sync/${batch}`, { method: "POST" });
+              break;
+            }
+            case "sort": {
+              const batch = batchSelector.value;
+              if (!batch) {
+                alert("Select a batch first.");
+                return;
+              }
+              await apiRequest(`/api/workflow/sort/${batch}`, { method: "POST" });
+              break;
+            }
+            case "cleanup":
+              await apiRequest("/api/cleanup/run", { method: "POST" });
+              break;
+            default:
+              break;
+          }
+          await refreshAll();
+        } catch (error) {
+          alert(`Action failed: ${error.message}`);
+        }
+      }
+
+      async function fetchSyncthingDiagnostics() {
+        syncthingStatus.textContent = "Querying Syncthing…";
+        syncthingStatus.style.color = "#475569";
+        try {
+          const diagnostics = await apiRequest("/api/sync/diagnostics");
+          syncthingInfo.textContent = JSON.stringify(diagnostics, null, 2);
+          const refreshedAt = new Date().toISOString();
+          const hasError = Boolean(diagnostics.syncthing_status?.error);
+          syncthingStatus.textContent = hasError
+            ? `Diagnostics refreshed (${refreshedAt}) • ${diagnostics.syncthing_status.error}`
+            : `Diagnostics refreshed (${refreshedAt}).`;
+          syncthingStatus.style.color = hasError ? "#991b1b" : "#166534";
+        } catch (error) {
+          syncthingStatus.textContent = `Diagnostics failed: ${error.message}`;
+          syncthingStatus.style.color = "#991b1b";
+        }
+      }
+
+      async function manualSyncRefresh() {
+        showSyncMessage("Refreshing sync progress…", "#475569");
+        try {
+          const payload = await apiRequest("/api/workflow/sync/refresh", {
+            method: "POST",
+          });
+          const suffix = payload.count === 1 ? "batch" : "batches";
+          showSyncMessage(`Refreshed ${payload.count} ${suffix}.`);
+          await refreshAll();
+        } catch (error) {
+          showSyncMessage(`Refresh failed: ${error.message}`, "#991b1b");
+        }
+      }
+
+      async function pollStatus() {
+        await refreshAll();
+        pollTimer = window.setTimeout(pollStatus, 5000);
+      }
+
+      document
+        .getElementById("run-workflow")
+        .addEventListener("click", async () => {
+          const button = document.getElementById("run-workflow");
+          button.disabled = true;
+          try {
+            const result = await apiRequest("/api/workflow/run", { method: "POST" });
+            if (!result.started) {
+              alert("Workflow already running.");
+            }
+            await refreshAll();
+          } catch (error) {
+            alert(`Unable to start workflow: ${error.message}`);
+          } finally {
+            button.disabled = false;
+          }
+        });
+
+      document.getElementById("save-config").addEventListener("click", saveConfig);
+      document
+        .getElementById("reset-config")
+        .addEventListener("click", () => {
+          configEditor.value = lastConfigSnapshot;
+          configMessage.textContent = "Changes reverted.";
+          configMessage.style.color = "#475569";
+        });
+
+      document
+        .getElementById("refresh-overview")
+        .addEventListener("click", () => refreshAll(true));
+
+      if (syncRefreshBtn) {
+        syncRefreshBtn.addEventListener("click", manualSyncRefresh);
+      }
+
+      if (debugAdvanceBtn) {
+        debugAdvanceBtn.addEventListener("click", async () => {
+          debugAdvanceBtn.disabled = true;
+          try {
+            const payload = await apiRequest("/api/workflow/debug/advance", {
+              method: "POST",
+            });
+            renderDebugState(payload);
+            await refreshAll();
+          } catch (error) {
+            showLinkMessage(`Advance failed: ${error.message}`, "#991b1b");
+          } finally {
+            debugAdvanceBtn.disabled = false;
+          }
+        });
+      }
+
+      document
+        .getElementById("copy-config-path")
+        .addEventListener("click", async () => {
+          if (!overviewConfigMeta?.path) {
+            showLinkMessage(
+              "Configuration path unavailable from overview.",
+              "#991b1b",
+            );
+            return;
+          }
+          try {
+            await navigator.clipboard.writeText(overviewConfigMeta.path);
+            showLinkMessage(`Copied ${overviewConfigMeta.path} to clipboard.`);
+          } catch (error) {
+            showLinkMessage(`Copy failed: ${error.message}`, "#991b1b");
+          }
+        });
+
+      document
+        .getElementById("syncthing-refresh")
+        .addEventListener("click", fetchSyncthingDiagnostics);
+
+      syncthingOpenBtn.addEventListener("click", () => {
+        if (!syncthingUiUrl) {
+          showLinkMessage(
+            "Syncthing UI URL unavailable – set syncthing.api_url first.",
+            "#991b1b",
+          );
+          return;
+        }
+        window.open(syncthingUiUrl, "_blank", "noopener,noreferrer");
+      });
+
+      document
+        .querySelectorAll("button[data-action]")
+        .forEach((button) => {
+          button.addEventListener("click", () => handleAction(button.dataset.action));
+        });
+
+      window.addEventListener("beforeunload", () => {
+        if (pollTimer) {
+          window.clearTimeout(pollTimer);
+        }
+      });
+
+      loadConfig();
+      pollStatus();
+    </script>
+  </body>
+</html>
