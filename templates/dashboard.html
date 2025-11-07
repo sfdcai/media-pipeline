@@ -7,38 +7,211 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+      .card-gradient {
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.85), rgba(15, 23, 42, 0.85));
+        border: 1px solid rgba(71, 85, 105, 0.35);
+        border-radius: 1rem;
+        padding: 1.5rem;
+        box-shadow: 0 20px 45px rgba(15, 23, 42, 0.35);
+        backdrop-filter: blur(6px);
+      }
+      .card-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        color: rgba(148, 163, 184, 0.9);
+      }
+      .card-value {
+        font-size: 2rem;
+        font-weight: 600;
+        color: #f8fafc;
+        margin-top: 0.5rem;
+      }
+      .card-sub {
+        font-size: 0.75rem;
+        color: rgba(148, 163, 184, 0.85);
+        margin-top: 0.4rem;
+      }
+      .panel {
+        background: rgba(15, 23, 42, 0.7);
+        border: 1px solid rgba(71, 85, 105, 0.35);
+        border-radius: 1rem;
+        padding: 1.5rem;
+        box-shadow: 0 20px 45px rgba(15, 23, 42, 0.35);
+        backdrop-filter: blur(8px);
+      }
+      .panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1.5rem;
+      }
+      .panel-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #e2e8f0;
+      }
+      .panel-subtitle {
+        font-size: 0.875rem;
+        color: rgba(148, 163, 184, 0.9);
+      }
+      .progress-bar {
+        height: 0.65rem;
+        width: 100%;
+        overflow: hidden;
+        border-radius: 9999px;
+        background: rgba(71, 85, 105, 0.4);
+        margin-top: 0.5rem;
+      }
+      .progress-bar-fill {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #22d3ee, #38bdf8);
+        width: 0%;
+        transition: width 0.6s ease, background 0.6s ease;
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 9999px;
+        padding: 0.35rem 0.75rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #e2e8f0;
+        background: rgba(59, 130, 246, 0.18);
+        border: 1px solid rgba(96, 165, 250, 0.25);
+      }
+    </style>
   </head>
   <body class="bg-slate-900 text-slate-100 min-h-screen">
-    <div class="max-w-6xl mx-auto py-10 px-6 space-y-8">
-      <header>
-        <h1 class="text-3xl font-semibold">Media Pipeline Dashboard</h1>
-        <p class="text-slate-300">Live snapshot of ingestion and processing progress.</p>
+    <div class="max-w-7xl mx-auto py-10 px-6 space-y-8">
+      <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 class="text-3xl font-semibold">Media Pipeline Dashboard</h1>
+          <p class="text-slate-300">
+            Track deduplication, batching, syncing, and sorting activity in real time.
+          </p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="inline-flex items-center gap-2 rounded-full bg-emerald-500/20 px-4 py-2 text-sm text-emerald-200">
+            <span class="h-2 w-2 rounded-full bg-emerald-300 animate-pulse"></span>
+            Live snapshot
+          </span>
+          <button
+            class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:border-slate-500 hover:text-white"
+            hx-get="/api/dashboard"
+            hx-target="#dashboard-data"
+            hx-trigger="click"
+          >
+            Refresh now
+          </button>
+        </div>
       </header>
 
-      <section class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <article class="bg-slate-800/70 rounded-xl p-6 shadow-md">
-          <h2 class="text-xl font-semibold mb-4">File Status</h2>
-          <canvas id="fileStatusChart" height="180"></canvas>
+      <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4" id="headlineCards">
+        <article class="card-gradient">
+          <h3 class="card-label">Total Files</h3>
+          <p id="headlineTotalFiles" class="card-value">–</p>
+          <p class="card-sub" id="headlineSortedFiles">Sorted: –</p>
         </article>
-        <article class="bg-slate-800/70 rounded-xl p-6 shadow-md">
-          <h2 class="text-xl font-semibold mb-4">Batch Status</h2>
-          <canvas id="batchStatusChart" height="180"></canvas>
+        <article class="card-gradient">
+          <h3 class="card-label">Batches</h3>
+          <p id="headlineTotalBatches" class="card-value">–</p>
+          <p class="card-sub" id="headlineSortedBatches">Sorted: –</p>
+        </article>
+        <article class="card-gradient">
+          <h3 class="card-label">Duplicates</h3>
+          <p id="headlineDuplicates" class="card-value">–</p>
+          <p class="card-sub">Auto-triaged items</p>
+        </article>
+        <article class="card-gradient">
+          <h3 class="card-label">Storage in Use</h3>
+          <p id="headlineStorage" class="card-value">–</p>
+          <p class="card-sub">Batch + sorted directories</p>
         </article>
       </section>
 
-      <section class="bg-slate-800/70 rounded-xl p-6 shadow-md">
-        <h2 class="text-xl font-semibold mb-4">Storage Overview</h2>
-        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <article class="col-span-1 lg:col-span-2 space-y-6">
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">Processing Progress</h2>
+                <p class="panel-subtitle">Completion by phase</p>
+              </div>
+            </div>
+            <div class="space-y-6">
+              <div>
+                <div class="flex items-center justify-between text-sm text-slate-300">
+                  <span>Files sorted</span>
+                  <span id="fileCompletionLabel">–</span>
+                </div>
+                <div class="progress-bar"><div id="fileCompletionBar" class="progress-bar-fill"></div></div>
+              </div>
+              <div>
+                <div class="flex items-center justify-between text-sm text-slate-300">
+                  <span>Batches completed</span>
+                  <span id="batchCompletionLabel">–</span>
+                </div>
+                <div class="progress-bar"><div id="batchCompletionBar" class="progress-bar-fill"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <article class="panel">
+              <div class="panel-header">
+                <h2 class="panel-title">File Status</h2>
+              </div>
+              <canvas id="fileStatusChart" height="180"></canvas>
+            </article>
+            <article class="panel">
+              <div class="panel-header">
+                <h2 class="panel-title">Batch Status</h2>
+              </div>
+              <canvas id="batchStatusChart" height="180"></canvas>
+            </article>
+          </div>
+        </article>
+
+        <aside class="panel space-y-6">
           <div>
-            <dt class="text-sm uppercase text-slate-400">Batch Directory</dt>
-            <dd id="batchStorage" class="text-lg font-medium">–</dd>
+            <h2 class="panel-title">Storage Overview</h2>
+            <dl class="space-y-4">
+              <div>
+                <dt class="text-sm uppercase text-slate-400">Batch Directory</dt>
+                <dd id="batchStorage" class="text-lg font-semibold">–</dd>
+              </div>
+              <div>
+                <dt class="text-sm uppercase text-slate-400">Sorted Directory</dt>
+                <dd id="sortedStorage" class="text-lg font-semibold">–</dd>
+              </div>
+            </dl>
           </div>
           <div>
-            <dt class="text-sm uppercase text-slate-400">Sorted Directory</dt>
-            <dd id="sortedStorage" class="text-lg font-medium">–</dd>
+            <h2 class="panel-title">Recent Batches</h2>
+            <div class="overflow-hidden rounded-lg border border-slate-800/70">
+              <table class="min-w-full divide-y divide-slate-800/80 text-sm" id="recentBatchTable">
+                <thead class="bg-slate-800/40 text-slate-300">
+                  <tr>
+                    <th class="px-3 py-2 text-left font-medium">Batch</th>
+                    <th class="px-3 py-2 text-left font-medium">Status</th>
+                    <th class="px-3 py-2 text-right font-medium">Files</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/80 text-slate-200" id="recentBatchBody">
+                  <tr>
+                    <td class="px-3 py-3" colspan="3">No batches yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-        </dl>
-        <p id="lastUpdated" class="text-xs text-slate-500 mt-4"></p>
+          <p id="lastUpdated" class="text-xs text-slate-500"></p>
+        </aside>
       </section>
     </div>
 
@@ -61,6 +234,15 @@
         return `${scaled.toFixed(1)} ${units[exponent]}`;
       };
 
+      const statusColours = [
+        '#38bdf8',
+        '#f97316',
+        '#a855f7',
+        '#10b981',
+        '#facc15',
+        '#f87171',
+      ];
+
       let fileChart;
       let batchChart;
 
@@ -75,21 +257,80 @@
       });
 
       function updateSummary(data) {
-        updateStorage(data.storage || {});
-        renderStatusCharts(data.files || {}, data.batches || {});
+        const files = data.files || {};
+        const batches = data.batches || {};
+        const storage = data.storage || {};
+
+        updateHeadlines(files, batches, storage);
+        updateStorage(storage);
+        updateProgress(files, batches);
+        updateRecentBatches(data.recent_batches || []);
+        renderStatusCharts(files, batches);
+
         const timestamp = data.generated_at
           ? new Date(data.generated_at).toLocaleString()
           : new Date().toLocaleString();
-        document.getElementById('lastUpdated').textContent = `Updated ${timestamp}`;
+        document.getElementById('lastUpdated').textContent = `Last updated ${timestamp}`;
+      }
+
+      function updateHeadlines(files, batches, storage) {
+        const fileTotal = files.total || 0;
+        const sortedFiles = (files.by_status && files.by_status.SORTED) || 0;
+        const duplicates = (files.by_status && files.by_status.DUPLICATE) || 0;
+        const batchTotal = batches.total || 0;
+        const sortedBatches = (batches.by_status && batches.by_status.SORTED) || 0;
+        const storageTotal = (storage.batch_dir_bytes || 0) + (storage.sorted_dir_bytes || 0);
+
+        document.getElementById('headlineTotalFiles').textContent = fileTotal.toLocaleString();
+        document.getElementById('headlineSortedFiles').textContent = `Sorted: ${sortedFiles.toLocaleString()}`;
+        document.getElementById('headlineTotalBatches').textContent = batchTotal.toLocaleString();
+        document.getElementById('headlineSortedBatches').textContent = `Sorted: ${sortedBatches.toLocaleString()}`;
+        document.getElementById('headlineDuplicates').textContent = duplicates.toLocaleString();
+        document.getElementById('headlineStorage').textContent = formatBytes(storageTotal);
       }
 
       function updateStorage(storage) {
-        document.getElementById('batchStorage').textContent = formatBytes(
-          storage.batch_dir_bytes || 0
-        );
-        document.getElementById('sortedStorage').textContent = formatBytes(
-          storage.sorted_dir_bytes || 0
-        );
+        document.getElementById('batchStorage').textContent = formatBytes(storage.batch_dir_bytes || 0);
+        document.getElementById('sortedStorage').textContent = formatBytes(storage.sorted_dir_bytes || 0);
+      }
+
+      function updateProgress(files, batches) {
+        const fileCompletion = Math.min(100, files.completion_percent || 0);
+        const batchCompletion = Math.min(100, batches.completion_percent || 0);
+
+        document.getElementById('fileCompletionLabel').textContent = `${fileCompletion.toFixed(1)}%`;
+        document.getElementById('fileCompletionBar').style.width = `${fileCompletion}%`;
+
+        document.getElementById('batchCompletionLabel').textContent = `${batchCompletion.toFixed(1)}%`;
+        document.getElementById('batchCompletionBar').style.width = `${batchCompletion}%`;
+      }
+
+      function updateRecentBatches(batches) {
+        const tbody = document.getElementById('recentBatchBody');
+        tbody.innerHTML = '';
+
+        if (!batches.length) {
+          tbody.innerHTML = '<tr><td class="px-3 py-3" colspan="3">No batches yet.</td></tr>';
+          return;
+        }
+
+        batches.forEach((batch) => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td class="px-3 py-2">
+              <div class="font-medium">${batch.name || `Batch ${batch.id}`}</div>
+              <div class="text-xs text-slate-400">Created ${batch.created_at || '–'}</div>
+            </td>
+            <td class="px-3 py-2">
+              <span class="status-pill">${batch.status || 'UNKNOWN'}</span>
+            </td>
+            <td class="px-3 py-2 text-right">
+              <div>${(batch.file_count || 0).toLocaleString()} files</div>
+              <div class="text-xs text-slate-400">${formatBytes(batch.size_bytes || 0)}</div>
+            </td>
+          `;
+          tbody.appendChild(row);
+        });
       }
 
       function renderStatusCharts(fileSummary, batchSummary) {
@@ -102,6 +343,9 @@
         const batchLabels = Object.keys(batchSummary.by_status || {});
         const batchValues = batchLabels.map((label) => batchSummary.by_status[label]);
 
+        const fileColours = fileLabels.map((_, index) => statusColours[index % statusColours.length]);
+        const batchColours = batchLabels.map((_, index) => statusColours[index % statusColours.length]);
+
         if (!fileChart) {
           fileChart = new Chart(fileCtx, {
             type: 'doughnut',
@@ -110,7 +354,7 @@
               datasets: [
                 {
                   data: fileValues,
-                  backgroundColor: ['#22d3ee', '#f97316', '#10b981', '#facc15'],
+                  backgroundColor: fileColours,
                 },
               ],
             },
@@ -119,6 +363,7 @@
         } else {
           fileChart.data.labels = fileLabels;
           fileChart.data.datasets[0].data = fileValues;
+          fileChart.data.datasets[0].backgroundColor = fileColours;
           fileChart.update();
         }
 
@@ -131,7 +376,7 @@
                 {
                   label: 'Batches',
                   data: batchValues,
-                  backgroundColor: '#6366f1',
+                  backgroundColor: batchColours,
                 },
               ],
             },
@@ -143,6 +388,7 @@
         } else {
           batchChart.data.labels = batchLabels;
           batchChart.data.datasets[0].data = batchValues;
+          batchChart.data.datasets[0].backgroundColor = batchColours;
           batchChart.update();
         }
       }

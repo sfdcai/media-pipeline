@@ -78,7 +78,7 @@ class SortService:
 
         files = self._db.fetchall(
             "SELECT rowid, path, target_path, status, exif_datetime FROM files WHERE batch_id = ?",
-            (record["rowid"],),
+            (record["id"],),
         )
 
         sorted_count = 0
@@ -157,7 +157,7 @@ class SortService:
 
         files = self._db.fetchall(
             "SELECT status FROM files WHERE batch_id = ?",
-            (record["rowid"],),
+            (record["id"],),
         )
         total = len(files)
         sorted_count = sum(1 for row in files if row["status"] == FILE_STATUS_SORTED)
@@ -172,12 +172,12 @@ class SortService:
     # ------------------------------------------------------------------
     def _get_batch(self, batch_name: str) -> Optional[dict[str, str]]:
         row = self._db.fetchone(
-            "SELECT rowid, status FROM batches WHERE name = ?",
+            "SELECT id, status FROM batches WHERE name = ?",
             (batch_name,),
         )
         if row is None:
             return None
-        return {"rowid": row["rowid"], "status": row["status"]}
+        return {"id": int(row["id"]), "status": row["status"]}
 
     def _determine_destination(
         self, path: Path, row: dict[str, object]

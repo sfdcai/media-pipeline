@@ -54,6 +54,8 @@ else
 fi
 if [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
   run_cmd "$ROOT_DIR/.venv/bin/python" --version
+elif [[ -x "$INSTALL_DIR/.venv/bin/python" ]]; then
+  run_cmd "$INSTALL_DIR/.venv/bin/python" --version
 fi
 
 section "Filesystem"
@@ -66,8 +68,10 @@ printf 'Log dir:      %s\n' "$LOG_DIR"
 section "Python packages"
 if [[ -x "$ROOT_DIR/.venv/bin/pip" ]]; then
   run_cmd "$ROOT_DIR/.venv/bin/pip" list
+elif [[ -x "$INSTALL_DIR/.venv/bin/pip" ]]; then
+  run_cmd "$INSTALL_DIR/.venv/bin/pip" list
 else
-  echo "Virtual environment not detected at $ROOT_DIR/.venv"
+  echo "Virtual environment not detected at $ROOT_DIR/.venv or $INSTALL_DIR/.venv"
 fi
 
 section "Configuration snapshot"

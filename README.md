@@ -8,17 +8,51 @@ Media Pipeline is a FastAPI-based automation service that synchronizes, sorts, a
 - **Batch Orchestration** – Deduplicates assets, builds transfer-ready batches, and records manifests for downstream systems.
 - **Syncthing Integration** – Triggers rescans, monitors completion, and feeds events into the SQLite journal for traceability.
 - **EXIF Sorting & Cleanup** – Groups media into date-based folders and removes stale batches or orphaned files.
-- **Operational Dashboard** – HTMX interface summarizing throughput, queue depth, and health indicators in near-real time.
+- **Operational Dashboard & Control Center** – HTMX dashboard plus a lightweight control UI for editing config, launching runs, reviewing workflow history, and visualizing live progress with charts, progress bars, and headline metrics.
+
+## Architecture Overview
+
+The service is composed of modular building blocks that share a common service container:
+
+- **`utils/service_container.py`** wires together the SQLite database manager, Syncthing client, and the core modules using the active configuration (from `/etc/media-pipeline/config.yaml` by default).
+- **Dedup module (`modules/dedup.py`)** scans the ingestion directory, hashes files, and labels duplicates so they can be excluded from batching.
+- **Batch module (`modules/batch.py`)** selects unique files up to a configurable size limit, moves them into `batch_dir`, and records both a manifest and the `batch_id`/`batch_name` pair used throughout the pipeline.
+- **Sync monitor (`modules/sync_monitor.py`)** coordinates with Syncthing to rescan the batch folder, polls completion, and marks database records as synced.
+- **Sorter (`modules/exif_sorter.py`)** reads EXIF data (with filesystem timestamps as a fallback) and files them into the archival tree.
+- **Cleanup (`modules/cleanup.py`)** prunes empty batch directories, old temp files, and rotates log files as needed.
+- **Workflow orchestrator (`modules/workflow.py`)** stitches the modules together, exposing both a REST API (`/api/workflow/*`) and a menu-driven CLI (`scripts/workflow.py`).
+- **UI templates (`templates/dashboard.html` & `templates/control.html`)** provide a quick operational overview and a control center for day-to-day tasks.
+
+Each component is independently testable and can be invoked either from the API, the CLI helper, or the control center UI.
 
 ## Getting Started
 
-The easiest way to install Media Pipeline on a fresh host is via the automated installer, which prepares system dependencies, downloads the latest GitHub release, and provisions the Python environment.
+### Automated Provisioning (recommended)
+
+Fresh machines can be bootstrapped end-to-end with the bundled shell scripts. Run the following commands in order:
 
 ```bash
+# 1. Install system dependencies, download the release bundle, and create /opt/media-pipeline
 curl -fsSL https://raw.githubusercontent.com/sfdcai/media-pipeline/main/scripts/install.sh | bash
+
+# 2. Ensure configuration, database schema, and service scaffolding are in place
+sudo /opt/media-pipeline/scripts/setup.sh
+
+# 3. Launch the API and SQLite web UI (backgrounded via run.sh)
+sudo /opt/media-pipeline/scripts/run.sh
 ```
 
-> **Note:** The installer detects the local package manager (APT, DNF/YUM, or Homebrew) and may prompt for sudo privileges while installing dependencies.
+The installer detects the host package manager (APT, DNF/YUM, Homebrew) and may prompt for elevated privileges while installing prerequisites. Both `install.sh` and `setup.sh` now provision Syncthing alongside Python tooling, copy `config/default_config.yaml` into `/etc/media-pipeline/config.yaml` when needed, initialize `/var/lib/media-pipeline/db.sqlite`, and build an isolated virtual environment at `/opt/media-pipeline/.venv`. During setup we also create `/opt/media-pipeline/run` for PID tracking, ensure log and manifest directories exist, and enable the `syncthing@<user>` systemd service when `systemctl` is available. A dedicated `configure_syncthing.py` helper runs automatically so the Syncthing GUI/API bind to `0.0.0.0:8384` and the sync listeners open on `0.0.0.0:22000`, addressing the localhost-only behaviour highlighted in recent debug captures.
+
+The refreshed `run.sh` script reads port and log settings directly from `config.yaml`, kills any previously launched uvicorn/sqlite-web processes via PID files, and relaunches them with logs written to the configured `system.log_dir` (falling back to `/opt/media-pipeline/data/logs`). Companion helpers `stop.sh` and `restart.sh` live alongside `run.sh` for quick lifecycle management:
+
+```bash
+sudo /opt/media-pipeline/scripts/stop.sh     # Gracefully stop background services
+sudo /opt/media-pipeline/scripts/run.sh      # Start services (respects MEDIA_PIPELINE_CONFIG)
+sudo /opt/media-pipeline/scripts/restart.sh  # Stop + start in one step
+```
+
+Use `restart.sh` (or `sudo systemctl restart media-pipeline` when using the generated unit file) after deploying new code so the API picks up the latest changes.
 
 ### Manual Installation
 
@@ -42,9 +76,120 @@ curl -fsSL https://raw.githubusercontent.com/sfdcai/media-pipeline/main/scripts/
    uvicorn main:app --reload --host 0.0.0.0 --port 8080
    ```
 
+### Starting Processes Individually
+
+If you prefer to manage components yourself, activate the virtual environment created by the installer and start each service explicitly:
+
+```bash
+source /opt/media-pipeline/.venv/bin/activate
+
+# API server (respect configured port; add --reload for hot reloading)
+uvicorn main:app --host 0.0.0.0 --port 8080
+
+# SQLite web UI (DB browser)
+sqlite_web /var/lib/media-pipeline/db.sqlite --host 0.0.0.0 --port 8081
+```
+
+The helper scripts default to the ports defined under `system.port_api` and `system.port_dbui` in `config.yaml`. Backgrounded processes started via `run.sh` emit logs to the configured `system.log_dir` (for example `/var/log/media-pipeline/api.log` and `dbui.log`). Set `UVICORN_RELOAD=1` before calling `run.sh` when you want code changes to auto-reload during development.
+
+### Interactive Control Center
+
+Navigate to `http://<host>:8080/control` to open the new operations console. The page allows you to:
+
+- Inspect and edit `config.yaml` in-place with validation feedback.
+- Trigger the full workflow or individual modules (dedup, batch, sync, sort, cleanup).
+- Select the target batch by ID for sync/sort actions and review the last five batches at a glance.
+- Monitor dedup status, aggregated file counts, and the results of the most recent workflow run without refreshing.
+- Jump straight to the `/dashboard` view for sparkline charts, progress bars, storage usage, and recent batch summaries.
+
+The page refreshes status snapshots automatically every five seconds and surfaces warnings inline when API calls fail.
+
+### Menu-driven Workflow CLI
+
+Operators who prefer the terminal can launch the interactive helper:
+
+```bash
+./scripts/workflow.py            # Uses /etc/media-pipeline/config.yaml by default
+./scripts/workflow.py --config /path/to/custom.yaml
+```
+
+The menu mirrors the control center functionality—run the full pipeline, trigger individual modules, or view an overview without issuing raw HTTP requests. Results are printed step-by-step with structured JSON payloads.
+
+## Operating the Pipeline
+
+Once the services are online, the API lives at `http://<host>:8080` and the sqlite-web console at `http://<host>:8081`.
+
+### End-to-end workflow (API)
+
+To start a background workflow run via HTTP, call:
+
+```bash
+curl -X POST http://<host>:8080/api/workflow/run
+```
+
+The endpoint responds with `{ "started": true }` when a pipeline begins or `{ "started": false }` if another run is still in-flight. Poll `GET /api/workflow/status` for the latest result snapshot and `GET /api/workflow/overview` for live metrics.
+
+### Triggering modules one at a time (API)
+
+Each subsystem can also be invoked independently—handy for incremental processing or debugging specific steps. All examples below assume the API is running and authentication is disabled (the default). Add the header `-H "x-api-key: <token>"` when auth is enabled.
+
+```bash
+# 1. Deduplicate the ingestion source
+curl -X POST http://<host>:8080/api/dedup/start
+curl http://<host>:8080/api/dedup/status
+
+# 2. Build a batch of unique files (adjust max_size_gb in config.yaml for throughput)
+curl -X POST http://<host>:8080/api/batch/create
+
+# 3. Kick off Syncthing sync for a batch (replace BATCH_ID)
+curl -X POST http://<host>:8080/api/workflow/sync/BATCH_ID
+curl http://<host>:8080/api/sync/status/BATCH_ID
+
+# 4. Sort synced files into the archival tree
+curl -X POST http://<host>:8080/api/workflow/sort/BATCH_ID
+curl http://<host>:8080/api/sort/status/BATCH_ID
+
+# 5. Periodic maintenance (log rotation, stale artifacts, temp pruning)
+curl -X POST http://<host>:8080/api/cleanup/run
+```
+
+> **Troubleshooting Syncthing auth errors:** The sync endpoints forward
+> requests to the Syncthing REST API using the `syncthing.api_url`,
+> `syncthing.api_key`, and `syncthing.folder_id` values from the active
+> configuration. If the service logs `Syncthing request failed (403 Forbidden -
+> unauthorized…)` ensure the API key matches the value shown in the Syncthing
+> GUI and that the Media Pipeline host appears under **Settings → Advanced →
+> GUI → API Key / Allowed Networks**. When a folder id is supplied the rescan
+> call targets `/rest/db/scan` with the batch directory as a relative
+> sub-directory; without it the workflow falls back to the legacy absolute path
+> scan.
+
+Tip: while developing locally you can call these endpoints with the provided `./scripts/debug.sh` to confirm the database schema, log locations, and HTTP health probe responses.
+
+### Syncthing accessibility tweaks
+
+If you need to reapply the Syncthing listener changes (for example after a manual edit of `config.xml`) run:
+
+```bash
+/opt/media-pipeline/.venv/bin/python /opt/media-pipeline/scripts/configure_syncthing.py
+```
+
+Use `--config` to point at a custom `config.xml`. The tool reports the effective GUI address and all listener sockets; the setup
+and install scripts call it automatically and restart `syncthing@<user>` so new bindings take effect immediately.
+
 ## Configuration
 
 Default configuration values are stored at `/etc/media-pipeline/config.yaml` when installed via the provided scripts. The REST API exposes `GET /api/config` and `PUT /api/config` endpoints for live inspection and updates. Refer to [`docs/CONFIG.md`](docs/CONFIG.md) for the full schema and guidance on overriding paths, deduplication settings, Syncthing credentials, and dashboard options.
+
+## Enhancement Opportunities
+
+We are actively tracking the next improvements for the pipeline:
+
+- **Systemd hardening:** ship dedicated unit files for the API and sqlite-web processes (socket activation, restart policies, log forwarding).
+- **Observability:** emit Prometheus metrics and structured traces so that sync throughput and error rates can be graphed over time.
+- **Live log streaming:** surface tail-follow views in the control center to monitor API and worker output in real time.
+
+See [`prompts/TASKS.md`](prompts/TASKS.md) for the detailed task breakdown and status.
 
 ## Debugging
 
