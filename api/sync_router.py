@@ -45,6 +45,7 @@ async def start_sync(
     batch_id: int,
     request: Request,
     service: SyncService = Depends(get_sync_service),
+    request: Request,
 ) -> SyncStartResponse:
     try:
         batch_name = _resolve_batch_name(batch_id, request)
@@ -61,6 +62,7 @@ async def sync_status(
     batch_id: int,
     request: Request,
     service: SyncService = Depends(get_sync_service),
+    request: Request,
 ) -> SyncStatusResponse:
     try:
         batch_name = _resolve_batch_name(batch_id, request)
