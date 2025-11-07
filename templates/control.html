@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Media Pipeline Control Center</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 0;
+        background: #f5f6fa;
+        color: #1f2933;
+      }
+      header {
+        background: #1b4b91;
+        color: white;
+        padding: 1.5rem 2rem;
+      }
+      main {
+        display: grid;
+        gap: 1.5rem;
+        padding: 2rem;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      }
+      section {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+      }
+      h1, h2, h3 {
+        margin-top: 0;
+      }
+      button,
+      textarea,
+      select {
+        font: inherit;
+      }
+      button {
+        background: #1b4b91;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 0.6rem 1rem;
+        cursor: pointer;
+        margin: 0.25rem 0.25rem 0.25rem 0;
+        transition: background 0.2s ease-in-out;
+      }
+      button.secondary {
+        background: #475569;
+      }
+      button:disabled {
+        background: #94a3b8;
+        cursor: not-allowed;
+      }
+      button:hover:not(:disabled) {
+        background: #163b72;
+      }
+      select {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        border: 1px solid #cbd5e1;
+        background: #ffffff;
+        margin-top: 0.5rem;
+      }
+      textarea {
+        width: 100%;
+        height: 260px;
+        border-radius: 8px;
+        border: 1px solid #cbd5e1;
+        padding: 0.75rem;
+        resize: vertical;
+        background: #f8fafc;
+      }
+      pre {
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 1rem;
+        border-radius: 8px;
+        overflow-x: auto;
+        font-size: 0.9rem;
+      }
+      ul {
+        padding-left: 1.1rem;
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border-radius: 999px;
+        padding: 0.25rem 0.75rem;
+        background: #e2e8f0;
+        color: #0f172a;
+        font-size: 0.85rem;
+      }
+      .status-pill.running {
+        background: #22c55e33;
+        color: #166534;
+      }
+      .status-pill.error {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      .grid-two {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .card-grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+      .card {
+        background: #e2e8f0;
+        border-radius: 10px;
+        padding: 1rem;
+      }
+      .step-list {
+        display: grid;
+        gap: 0.75rem;
+      }
+      .step {
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 0.75rem;
+        background: #f8fafc;
+      }
+      footer {
+        text-align: center;
+        padding: 1rem 2rem 2rem;
+        color: #64748b;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Media Pipeline Control Center</h1>
+      <p>Review configuration, run modules, and monitor workflow status.</p>
+    </header>
+    <main>
+      <section>
+        <h2>Quick Actions</h2>
+        <p>Kick off the entire workflow or run individual modules on-demand.</p>
+        <div>
+          <button id="run-workflow">Run Complete Workflow</button>
+          <button class="secondary" data-action="dedup">Run Dedup</button>
+          <button class="secondary" data-action="batch">Create Batch</button>
+          <button class="secondary" data-action="sync">Start Sync</button>
+          <button class="secondary" data-action="sort">Sort Batch</button>
+          <button class="secondary" data-action="cleanup">Run Cleanup</button>
+        </div>
+        <div style="margin-top: 1rem">
+          <label for="batch-selector" style="font-weight: 600"
+            >Target batch for sync/sort</label
+          >
+          <select id="batch-selector">
+            <option value="">Select a batch…</option>
+          </select>
+          <p style="font-size: 0.85rem; color: #475569; margin-top: 0.35rem">
+            The list shows the five most recent batches. Create a new batch first if
+            none appear.
+          </p>
+        </div>
+        <div id="workflow-status" class="status-pill" style="margin-top: 1rem">
+          Loading status…
+        </div>
+      </section>
+
+      <section>
+        <h2>Configuration</h2>
+        <p>Edit the configuration safely and push updates instantly.</p>
+        <textarea id="config-editor" spellcheck="false"></textarea>
+        <div style="margin-top: 0.75rem">
+          <button id="save-config">Save Configuration</button>
+          <button class="secondary" id="reset-config">Reset</button>
+        </div>
+        <p id="config-message" style="margin-top: 0.75rem; color: #166534"></p>
+      </section>
+
+      <section>
+        <h2>Current Snapshot</h2>
+        <div class="card-grid" style="margin-bottom: 1rem">
+          <div class="card">
+            <h3 style="margin-bottom: 0.35rem">Deduplication</h3>
+            <pre id="dedup-status" style="height: 140px">Loading…</pre>
+          </div>
+          <div class="card">
+            <h3 style="margin-bottom: 0.35rem">File Counts</h3>
+            <pre id="file-counts" style="height: 140px">Loading…</pre>
+          </div>
+          <div class="card">
+            <h3 style="margin-bottom: 0.35rem">Workflow Notes</h3>
+            <p id="workflow-hints" style="font-size: 0.9rem; line-height: 1.4">
+              Monitor progress from the cards on this page. The overview refreshes every
+              five seconds when open.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Recent Batches</h2>
+        <ul id="batch-list">
+          <li>Loading…</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Last Workflow Run</h2>
+        <div id="last-run" class="step-list">
+          <p>No workflow has been executed yet.</p>
+        </div>
+      </section>
+    </main>
+    <footer>
+      Tip: the interactive CLI is available via <code>scripts/workflow.py</code>.
+    </footer>
+
+    <script>
+      const statusPill = document.getElementById("workflow-status");
+      const configEditor = document.getElementById("config-editor");
+      const configMessage = document.getElementById("config-message");
+      const batchSelector = document.getElementById("batch-selector");
+      let lastConfigSnapshot = "";
+
+      async function apiRequest(path, options = {}) {
+        const response = await fetch(path, {
+          headers: { "content-type": "application/json" },
+          ...options,
+        });
+        if (!response.ok) {
+          const detail = await response.text();
+          throw new Error(detail || response.statusText);
+        }
+        if (response.status === 204) {
+          return null;
+        }
+        return await response.json();
+      }
+
+      async function refreshOverview() {
+        try {
+          const overview = await apiRequest("/api/workflow/overview");
+          renderOverview(overview);
+        } catch (error) {
+          console.error(error);
+          statusPill.textContent = `Status unavailable: ${error.message}`;
+          statusPill.className = "status-pill error";
+        }
+      }
+
+      function renderOverview(overview) {
+        statusPill.textContent = overview.running
+          ? "Workflow running"
+          : "Workflow idle";
+        statusPill.className = overview.running
+          ? "status-pill running"
+          : "status-pill";
+
+        const dedup = document.getElementById("dedup-status");
+        dedup.textContent = JSON.stringify(overview.dedup, null, 2);
+
+        const counts = document.getElementById("file-counts");
+        counts.textContent = JSON.stringify(overview.file_counts, null, 2);
+
+        const batchList = document.getElementById("batch-list");
+        batchList.innerHTML = "";
+        batchSelector.innerHTML = '<option value="">Select a batch…</option>';
+        if (!overview.recent_batches.length) {
+          batchList.innerHTML = "<li>No batches yet.</li>";
+          batchSelector.disabled = true;
+        } else {
+          batchSelector.disabled = false;
+          for (const batch of overview.recent_batches) {
+            const item = document.createElement("li");
+            item.textContent = `#${batch.id} · ${batch.name} • ${batch.status}`;
+            const details = document.createElement("div");
+            details.style.fontSize = "0.85rem";
+            details.style.color = "#475569";
+            details.textContent = `created: ${batch.created_at || "-"} | synced: ${
+              batch.synced_at || "-"
+            } | sorted: ${batch.sorted_at || "-"}`;
+            item.appendChild(details);
+            batchList.appendChild(item);
+
+            const option = document.createElement("option");
+            option.value = batch.id;
+            option.textContent = `#${batch.id} – ${batch.name} (${batch.status})`;
+            batchSelector.appendChild(option);
+          }
+        }
+
+        const lastRun = document.getElementById("last-run");
+        lastRun.innerHTML = "";
+        if (!overview.last_run) {
+          lastRun.innerHTML = "<p>No workflow has been executed yet.</p>";
+        } else {
+          const meta = document.createElement("div");
+          meta.innerHTML = `<strong>Started:</strong> ${
+            overview.last_run.started_at
+          }<br/><strong>Finished:</strong> ${overview.last_run.finished_at}`;
+          lastRun.appendChild(meta);
+          for (const step of overview.last_run.steps) {
+            const div = document.createElement("div");
+            div.className = "step";
+            div.innerHTML = `<strong>${step.name.toUpperCase()}</strong><br/>Status: ${
+              step.status
+            }${step.message ? `<br/>${step.message}` : ""}`;
+            if (step.data) {
+              const pre = document.createElement("pre");
+              pre.textContent = JSON.stringify(step.data, null, 2);
+              div.appendChild(pre);
+            }
+            lastRun.appendChild(div);
+          }
+          if (overview.last_run.errors?.length) {
+            const errorList = document.createElement("div");
+            errorList.innerHTML = "<strong>Warnings</strong>";
+            const list = document.createElement("ul");
+            for (const err of overview.last_run.errors) {
+              const li = document.createElement("li");
+              li.textContent = err;
+              list.appendChild(li);
+            }
+            errorList.appendChild(list);
+            lastRun.appendChild(errorList);
+          }
+        }
+      }
+
+      async function loadConfig() {
+        try {
+          const config = await apiRequest("/api/config");
+          lastConfigSnapshot = JSON.stringify(config, null, 2);
+          configEditor.value = lastConfigSnapshot;
+          configMessage.textContent = "";
+        } catch (error) {
+          configEditor.value = "Unable to load configuration.";
+          configMessage.textContent = error.message;
+          configMessage.style.color = "#991b1b";
+        }
+      }
+
+      async function saveConfig() {
+        try {
+          const payload = JSON.parse(configEditor.value);
+          const updated = await apiRequest("/api/config", {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          });
+          lastConfigSnapshot = JSON.stringify(updated, null, 2);
+          configEditor.value = lastConfigSnapshot;
+          configMessage.textContent = "Configuration saved.";
+          configMessage.style.color = "#166534";
+        } catch (error) {
+          configMessage.textContent = `Save failed: ${error.message}`;
+          configMessage.style.color = "#991b1b";
+        }
+      }
+
+      async function handleAction(action) {
+        try {
+          switch (action) {
+            case "dedup":
+              await apiRequest("/api/dedup/start", { method: "POST" });
+              break;
+            case "batch":
+              await apiRequest("/api/batch/create", { method: "POST" });
+              break;
+            case "sync": {
+              const batch = batchSelector.value;
+              if (!batch) {
+                alert("Select a batch first.");
+                return;
+              }
+              await apiRequest(`/api/workflow/sync/${batch}`, { method: "POST" });
+              break;
+            }
+            case "sort": {
+              const batch = batchSelector.value;
+              if (!batch) {
+                alert("Select a batch first.");
+                return;
+              }
+              await apiRequest(`/api/workflow/sort/${batch}`, { method: "POST" });
+              break;
+            }
+            case "cleanup":
+              await apiRequest("/api/cleanup/run", { method: "POST" });
+              break;
+            default:
+              break;
+          }
+          await refreshOverview();
+        } catch (error) {
+          alert(`Action failed: ${error.message}`);
+        }
+      }
+
+      document
+        .getElementById("run-workflow")
+        .addEventListener("click", async () => {
+          document.getElementById("run-workflow").disabled = true;
+          try {
+            const result = await apiRequest("/api/workflow/run", { method: "POST" });
+            if (!result.started) {
+              alert("Workflow already running.");
+            }
+            await refreshOverview();
+          } catch (error) {
+            alert(`Unable to start workflow: ${error.message}`);
+          } finally {
+            document.getElementById("run-workflow").disabled = false;
+          }
+        });
+
+      document.getElementById("save-config").addEventListener("click", saveConfig);
+      document
+        .getElementById("reset-config")
+        .addEventListener("click", () => {
+          configEditor.value = lastConfigSnapshot;
+          configMessage.textContent = "Changes reverted.";
+          configMessage.style.color = "#475569";
+        });
+
+      document.querySelectorAll("button[data-action]").forEach((button) => {
+        button.addEventListener("click", () => handleAction(button.dataset.action));
+      });
+
+      async function pollStatus() {
+        await refreshOverview();
+        setTimeout(pollStatus, 5000);
+      }
+
+      loadConfig();
+      pollStatus();
+    </script>
+  </body>
+</html>
