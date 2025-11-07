@@ -45,6 +45,7 @@ def _load_default_config() -> Dict[str, Any]:
             "api_url": "http://127.0.0.1:8384/rest",
             "api_key": "",
             "folder_id": "",
+            "device_id": "",
             "poll_interval_sec": 60,
             "auto_sort_after_sync": True,
         },
@@ -89,11 +90,18 @@ def resolve_config_path(path: Path | str | None = None) -> Path:
     """Resolve the configuration file path using overrides or defaults."""
 
     if path is not None:
-        return Path(path)
+        if isinstance(path, Path):
+            text = str(path).strip()
+            if text:
+                return Path(text).expanduser()
+        else:
+            text = str(path).strip()
+            if text:
+                return Path(text).expanduser()
 
-    env_override = os.getenv("MEDIA_PIPELINE_CONFIG")
+    env_override = os.getenv("MEDIA_PIPELINE_CONFIG", "").strip()
     if env_override:
-        return Path(env_override)
+        return Path(env_override).expanduser()
     return DEFAULT_CONFIG_PATH
 
 

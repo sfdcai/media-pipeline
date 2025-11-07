@@ -5,6 +5,7 @@ APP_DIR="/opt/media-pipeline"
 DB_PATH="/var/lib/media-pipeline/db.sqlite"
 PY_ENV="$APP_DIR/.venv"
 CONFIG_PATH="${MEDIA_PIPELINE_CONFIG:-/etc/media-pipeline/config.yaml}"
+export MEDIA_PIPELINE_CONFIG="$CONFIG_PATH"
 RUN_DIR="$APP_DIR/run"
 DEFAULT_LOG_DIR="$APP_DIR/data/logs"
 
@@ -95,4 +96,5 @@ popd >/dev/null
 
 echo "API:     http://<host>:$PORT_API"
 echo "DB-UI:   http://<host>:$PORT_DBUI"
+echo "Config:  $CONFIG_PATH"
 echo "Logs:    $LOG_DIR (api.log, dbui.log)"

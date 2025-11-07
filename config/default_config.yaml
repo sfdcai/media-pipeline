@@ -18,6 +18,7 @@ syncthing:
   api_url: http://127.0.0.1:8384/rest
   api_key: ""
   folder_id: ""
+  device_id: ""
   poll_interval_sec: 60
   auto_sort_after_sync: true
 

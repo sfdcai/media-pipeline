@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -10,6 +11,7 @@ from api.workflow_router import (
     workflow_sort,
     workflow_status,
     workflow_sync,
+    workflow_sync_refresh,
 )
 from modules.batch import BatchCreationResult
 from modules.cleanup import CleanupReport
@@ -60,6 +62,9 @@ class StubBatchService:
 class StubSyncService:
     def __init__(self) -> None:
         self._status_calls = 0
+        self.folder_id = "stub-folder"
+        self.device_id = "stub-device"
+        self.last_error: str | None = None
 
     def start(self, batch_name: str) -> SyncStartResult:
         return SyncStartResult(batch=batch_name, started=True, status="SYNCING")
@@ -69,6 +74,18 @@ class StubSyncService:
         if self._status_calls >= 2:
             return SyncStatus(batch=batch_name, status="SYNCED", progress=100.0, synced_at="now")
         return SyncStatus(batch=batch_name, status="SYNCING", progress=50.0, synced_at=None)
+
+    def refresh_syncing_batches(self) -> list[dict[str, object]]:
+        return [
+            {
+                "batch_id": 1,
+                "batch": "batch_001",
+                "status": "SYNCED" if self._status_calls >= 2 else "SYNCING",
+                "progress": 100.0 if self._status_calls >= 2 else 50.0,
+                "synced_at": "now" if self._status_calls >= 2 else None,
+                "detail": None,
+            }
+        ]
 
 
 class StubSortService:
@@ -109,7 +126,11 @@ class StubDatabase:
 
 def build_stub_orchestrator() -> WorkflowOrchestrator:
     container = SimpleNamespace(
-        config={"system": {}},
+        config={
+            "system": {"log_dir": "/var/log/media-pipeline"},
+            "syncthing": {"api_url": "http://127.0.0.1:8384/rest"},
+        },
+        config_path=Path("/etc/media-pipeline/config.yaml"),
         database=StubDatabase(),
         dedup_service=StubDedupService(),
         batch_service=StubBatchService(),
@@ -143,6 +164,8 @@ async def test_workflow_orchestrator_overview_includes_last_run():
     assert overview["recent_batches"][0]["name"] == "batch_001"
     assert overview["file_counts"]["SORTED"] == 5
     assert overview["last_run"]["steps"]
+    assert overview["config"]["path"].endswith("config.yaml")
+    assert overview["syncing_batches"]
 
 
 class FakeManager:
@@ -162,6 +185,16 @@ class FakeManager:
             "dedup": {"running": False},
             "recent_batches": [],
             "file_counts": {},
+            "config": {
+                "path": "/etc/media-pipeline/config.yaml",
+                "log_dir": "/var/log/media-pipeline",
+                "syncthing": {
+                    "api_url": "http://127.0.0.1:8384/rest",
+                    "folder_id": None,
+                    "device_id": None,
+                    "last_error": None,
+                },
+            },
         }
 
     @property
@@ -186,4 +219,7 @@ async def test_workflow_router_endpoints():
 
     sort_payload = await workflow_sort(1, fake_manager)
     assert sort_payload["status"] == "completed"
+
+    refresh_payload = await workflow_sync_refresh(fake_manager)
+    assert "batches" in refresh_payload
 

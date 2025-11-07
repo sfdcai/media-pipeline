@@ -12,7 +12,7 @@ from modules.dashboard import DashboardService
 from modules.dedup import DedupService
 from modules.exif_sorter import SortService
 from modules.sync_monitor import SyncService
-from utils.config_loader import get_config_value, load_config
+from utils.config_loader import get_config_value, load_config, resolve_config_path
 from utils.db_manager import DatabaseManager
 from utils.syncthing_api import SyncthingAPI
 
@@ -22,6 +22,7 @@ class ServiceContainer:
     """Bundle of core services used across the application."""
 
     config: dict[str, Any]
+    config_path: Path
     database: DatabaseManager
     dedup_service: DedupService
     batch_service: BatchService
@@ -32,7 +33,11 @@ class ServiceContainer:
     syncthing_api: SyncthingAPI
 
 
-def build_service_container(config: dict[str, Any] | None = None) -> ServiceContainer:
+def build_service_container(
+    config: dict[str, Any] | None = None,
+    *,
+    config_path: Path | str | None = None,
+) -> ServiceContainer:
     """Construct application services from configuration.
 
     The logic mirrors the initialization performed for the FastAPI application
@@ -40,7 +45,12 @@ def build_service_container(config: dict[str, Any] | None = None) -> ServiceCont
     same wiring without re-implementing the setup steps.
     """
 
-    config_data = config or load_config()
+    if config_path is not None:
+        resolved_path = Path(config_path)
+    else:
+        resolved_path = Path(resolve_config_path())
+
+    config_data = config or load_config(resolved_path)
 
     db_path = Path(get_config_value("system", "db_path", config=config_data))
     source_dir = Path(get_config_value("paths", "source_dir", config=config_data))
@@ -79,6 +89,9 @@ def build_service_container(config: dict[str, Any] | None = None) -> ServiceCont
     syncthing_folder = get_config_value(
         "syncthing", "folder_id", default="", config=config_data
     )
+    syncthing_device = get_config_value(
+        "syncthing", "device_id", default="", config=config_data
+    )
 
     database = DatabaseManager(db_path)
     dedup_service = DedupService(
@@ -102,6 +115,7 @@ def build_service_container(config: dict[str, Any] | None = None) -> ServiceCont
         batch_dir=batch_dir,
         syncthing_api=syncthing_api,
         folder_id=str(syncthing_folder or "").strip() or None,
+        device_id=str(syncthing_device or "").strip() or None,
     )
     sort_service = SortService(
         database,
@@ -123,6 +137,7 @@ def build_service_container(config: dict[str, Any] | None = None) -> ServiceCont
 
     return ServiceContainer(
         config=config_data,
+        config_path=resolved_path,
         database=database,
         dedup_service=dedup_service,
         batch_service=batch_service,

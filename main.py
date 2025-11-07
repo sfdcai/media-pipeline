@@ -19,7 +19,7 @@ from api.sync_router import router as sync_router
 from api.workflow_router import router as workflow_router
 from middlewares import APIKeyMiddleware
 from modules.workflow import WorkflowManager, WorkflowOrchestrator
-from utils.config_loader import get_config_value, load_config
+from utils.config_loader import get_config_value, load_config, resolve_config_path
 from utils.service_container import build_service_container
 
 app = FastAPI(title="Media Pipeline", version="0.2.0")
@@ -28,7 +28,10 @@ templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 
 
 def _initialize_services(application: FastAPI) -> None:
-    container = build_service_container(load_config())
+    config_override = os.getenv("MEDIA_PIPELINE_CONFIG")
+    config_path = resolve_config_path(config_override)
+    config_data = load_config(config_path)
+    container = build_service_container(config_data, config_path=config_path)
 
     application.state.db = container.database
     application.state.dedup_service = container.dedup_service
@@ -39,6 +42,8 @@ def _initialize_services(application: FastAPI) -> None:
     application.state.dashboard_service = container.dashboard_service
     application.state.syncthing_api = container.syncthing_api
     application.state.config = container.config
+    application.state.config_path = str(config_path)
+    os.environ.setdefault("MEDIA_PIPELINE_CONFIG", str(config_path))
 
     orchestrator = WorkflowOrchestrator(container)
     application.state.workflow_orchestrator = orchestrator

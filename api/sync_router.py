@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from modules.sync_monitor import SyncService
+from modules.sync_monitor import SyncDiagnostics, SyncService
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
 
@@ -23,6 +23,25 @@ class SyncStatusResponse(BaseModel):
     status: str
     progress: float
     synced_at: str | None = None
+    detail: str | None = None
+
+
+class SyncDiagnosticsResponse(BaseModel):
+    batch_dir: str
+    folder_id: str | None = None
+    device_id: str | None = None
+    last_error: str | None = None
+    syncthing_status: dict[str, Any]
+
+
+def _resolve_batch_name(batch_id: int, request: Request) -> str:
+    database = getattr(request.app.state, "db", None)
+    if database is None:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    row = database.fetchone("SELECT name FROM batches WHERE id = ?", (batch_id,))
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Unknown batch id {batch_id}")
+    return row["name"]
 
 
 def _resolve_batch_name(batch_id: int, request: Request) -> str:
@@ -75,4 +94,10 @@ async def sync_status(
     return SyncStatusResponse(**result.__dict__)
 
 
-__all__ = ["router", "start_sync", "sync_status"]
+@router.get("/diagnostics", response_model=SyncDiagnosticsResponse)
+async def sync_diagnostics(service: SyncServiceDep) -> SyncDiagnosticsResponse:
+    diagnostics: SyncDiagnostics = service.diagnostics()
+    return SyncDiagnosticsResponse(**diagnostics.__dict__)
+
+
+__all__ = ["router", "start_sync", "sync_status", "sync_diagnostics"]

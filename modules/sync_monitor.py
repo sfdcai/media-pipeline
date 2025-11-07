@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from utils.db_manager import DatabaseManager
-from utils.syncthing_api import SyncthingAPI
+from utils.syncthing_api import SyncthingAPI, SyncthingAPIError
 
 from .batch import (
     FILE_STATUS_BATCHED,
@@ -35,6 +35,18 @@ class SyncStatus:
     status: str
     progress: float
     synced_at: Optional[str]
+    detail: Optional[str] = None
+
+
+@dataclass(slots=True)
+class SyncDiagnostics:
+    """Debug payload describing the current Syncthing integration state."""
+
+    batch_dir: str
+    folder_id: Optional[str]
+    device_id: Optional[str]
+    last_error: Optional[str]
+    syncthing_status: dict[str, Any]
 
 
 class SyncService:
@@ -47,12 +59,15 @@ class SyncService:
         syncthing_api: SyncthingAPI,
         *,
         folder_id: str | None = None,
+        device_id: str | None = None,
     ) -> None:
         self._db = db
         self._batch_dir = Path(batch_dir).expanduser().resolve()
         self._batch_dir.mkdir(parents=True, exist_ok=True)
         self._syncthing = syncthing_api
         self._folder_id = folder_id.strip() if folder_id else None
+        self._device_id = device_id.strip() if device_id else None
+        self._last_error: str | None = None
 
     # ------------------------------------------------------------------
     def start(self, batch_name: str) -> SyncStartResult:
@@ -89,6 +104,7 @@ class SyncService:
         else:
             self._syncthing.trigger_rescan(str(batch_path))
 
+        self._last_error = None
         return SyncStartResult(batch=batch_name, started=True, status=BATCH_STATUS_SYNCING)
 
     # ------------------------------------------------------------------
@@ -119,15 +135,90 @@ class SyncService:
                 synced_at=synced_at,
             )
 
-        completion = self._syncthing.folder_completion(self._folder_id or batch_name)
-        progress = completion.completion
+        try:
+            completion = self._syncthing.folder_completion(
+                self._folder_id or batch_name,
+                device=self._device_id,
+            )
+            progress = completion.completion
+            self._last_error = None
+            detail: str | None = None
+        except SyncthingAPIError as exc:
+            self._last_error = str(exc)
+            progress = 0.0
+            detail = str(exc)
 
         if progress >= 100.0:
             synced_at = self._mark_batch_synced(batch_name, record["id"])
             status = BATCH_STATUS_SYNCED
             progress = 100.0
 
-        return SyncStatus(batch=batch_name, status=status, progress=progress, synced_at=synced_at)
+        return SyncStatus(
+            batch=batch_name,
+            status=status,
+            progress=progress,
+            synced_at=synced_at,
+            detail=detail,
+        )
+
+    # ------------------------------------------------------------------
+    def diagnostics(self) -> SyncDiagnostics:
+        """Expose troubleshooting details for Syncthing integration."""
+
+        try:
+            status_payload = dict(self._syncthing.system_status())
+        except SyncthingAPIError as exc:  # pragma: no cover - network failures
+            status_payload = {"error": str(exc)}
+
+        return SyncDiagnostics(
+            batch_dir=str(self._batch_dir),
+            folder_id=self._folder_id,
+            device_id=self._device_id,
+            last_error=self._last_error,
+            syncthing_status=status_payload,
+        )
+
+    def refresh_syncing_batches(self) -> list[dict[str, Any]]:
+        """Poll all batches marked as ``SYNCING`` and update their status."""
+
+        rows = self._db.fetchall(
+            "SELECT id, name FROM batches WHERE status = ? ORDER BY datetime(created_at)",
+            (BATCH_STATUS_SYNCING,),
+        )
+
+        refreshed: list[dict[str, Any]] = []
+        for row in rows:
+            batch_name = row["name"]
+            try:
+                status = self.status(batch_name)
+            except ValueError:
+                continue
+
+            refreshed.append(
+                {
+                    "batch_id": int(row["id"]) if row["id"] is not None else None,
+                    "batch": status.batch,
+                    "status": status.status,
+                    "progress": status.progress,
+                    "synced_at": status.synced_at,
+                    "detail": status.detail,
+                }
+            )
+
+        return refreshed
+
+    # ------------------------------------------------------------------
+    @property
+    def folder_id(self) -> str | None:
+        return self._folder_id
+
+    @property
+    def device_id(self) -> str | None:
+        return self._device_id
+
+    @property
+    def last_error(self) -> str | None:
+        return self._last_error
 
     # ------------------------------------------------------------------
     def _get_batch(self, batch_name: str) -> Optional[dict[str, Optional[str]]]:
@@ -158,4 +249,9 @@ class SyncService:
         return timestamp
 
 
-__all__ = ["SyncService", "SyncStartResult", "SyncStatus"]
+__all__ = [
+    "SyncDiagnostics",
+    "SyncService",
+    "SyncStartResult",
+    "SyncStatus",
+]

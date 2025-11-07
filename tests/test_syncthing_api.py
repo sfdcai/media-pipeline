@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import json
 from typing import Any
 from urllib import error
 
@@ -84,3 +85,36 @@ def test_http_error_surfaces_auth_hint(monkeypatch) -> None:
 
     assert "403" in str(excinfo.value)
     assert "unauthorized" in str(excinfo.value)
+
+
+def test_folder_completion_parses_nested_completion(monkeypatch) -> None:
+    payload = json.dumps({"completion": {"DEVICE": {"completion": 87.5}}}).encode("utf-8")
+    captured = _capture_request(monkeypatch, payload=payload)
+
+    api = SyncthingAPI("http://localhost:8384/rest")
+    result = api.folder_completion("folder-a", device="DEVICE")
+
+    assert "/db/completion" in captured["url"]
+    assert captured["method"] == "GET"
+    assert result.completion == pytest.approx(87.5)
+
+
+def test_folder_completion_falls_back_to_global_completion(monkeypatch) -> None:
+    payload = json.dumps({"globalCompletion": 99.9}).encode("utf-8")
+    _capture_request(monkeypatch, payload=payload)
+
+    api = SyncthingAPI("http://localhost:8384/rest")
+    result = api.folder_completion("folder-b")
+
+    assert result.completion == pytest.approx(99.9)
+
+
+def test_system_status_returns_mapping(monkeypatch) -> None:
+    payload = json.dumps({"myID": "ABC", "state": "idle"}).encode("utf-8")
+    captured = _capture_request(monkeypatch, payload=payload)
+
+    api = SyncthingAPI("http://localhost:8384/rest")
+    status = api.system_status()
+
+    assert captured["url"].endswith("/system/status")
+    assert status == {"myID": "ABC", "state": "idle"}

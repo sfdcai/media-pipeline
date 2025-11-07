@@ -10,6 +10,7 @@ from typing import Any
 from modules.batch import BATCH_STATUS_SORTED, BATCH_STATUS_SYNCED
 from modules.cleanup import CleanupReport
 from modules.sync_monitor import SyncStatus
+from utils.config_loader import get_config_value
 from utils.db_manager import DatabaseManager
 from utils.service_container import ServiceContainer
 from utils.syncthing_api import SyncthingAPIError
@@ -133,6 +134,8 @@ class WorkflowOrchestrator:
             data["progress"] = sync_status.progress
             data["status"] = sync_status.status
             data["synced_at"] = sync_status.synced_at
+            if sync_status.detail:
+                data["detail"] = sync_status.detail
             if sync_status.status != BATCH_STATUS_SYNCED:
                 status = "warning"
                 data["reason"] = "Sync did not reach completion"
@@ -261,10 +264,17 @@ class WorkflowOrchestrator:
         )
 
     # ------------------------------------------------------------------
+    def refresh_syncing_batches(self) -> list[dict[str, Any]]:
+        """Poll Syncthing for batches marked as syncing and update progress."""
+
+        return self._container.sync_service.refresh_syncing_batches()
+
+    # ------------------------------------------------------------------
     def build_overview(
         self, *, last_run: PipelineRunResult | None, running: bool
     ) -> dict[str, Any]:
         dedup_status = self._container.dedup_service.status()
+        syncing_batches = self.refresh_syncing_batches()
         batch_snapshot = self._latest_batches(limit=5)
         counts = self._file_status_counts()
 
@@ -273,6 +283,26 @@ class WorkflowOrchestrator:
             "dedup": dedup_status,
             "recent_batches": batch_snapshot,
             "file_counts": counts,
+            "syncing_batches": syncing_batches,
+        }
+        overview["config"] = {
+            "path": str(self._container.config_path),
+            "log_dir": str(
+                get_config_value(
+                    "system", "log_dir", default="", config=self._container.config
+                )
+            ),
+            "syncthing": {
+                "api_url": get_config_value(
+                    "syncthing",
+                    "api_url",
+                    default="",
+                    config=self._container.config,
+                ),
+                "folder_id": self._container.sync_service.folder_id,
+                "device_id": self._container.sync_service.device_id,
+                "last_error": self._container.sync_service.last_error,
+            },
         }
         if last_run is not None:
             overview["last_run"] = last_run.to_dict()

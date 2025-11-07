@@ -1,6 +1,15 @@
 # Changelog
 
 ## Unreleased
+- fix(sync): refresh syncing batches during overview generation and add `/api/workflow/sync/refresh` for manual progress polls
+- feat(ui): surface an active sync panel with manual refresh controls and shareable dashboard/control/db-ui URLs in /control
+- fix(config): ignore blank MEDIA_PIPELINE_CONFIG overrides when resolving the effective configuration path
+- feat(debug): emit web UI links and Syncthing `/db/completion` probes from scripts/debug.sh for faster troubleshooting
+- fix(sync): normalize Syncthing completion payloads, track last errors, and honor optional device ids
+- feat(sync): expose `/api/sync/diagnostics` for REST-driven troubleshooting and surface detail fields in status responses
+- feat(ui): enrich /control with quick links, config helpers, and Syncthing diagnostics tooling
+- fix(scripts): export MEDIA_PIPELINE_CONFIG in run.sh and extend debug.sh with Syncthing status checks
+- docs: document new diagnostics flow, config path handling, and control center enhancements
 - fix(sync): use folder-aware rescans, trim API keys, and surface actionable Syncthing 401/403 guidance
 - feat(dashboard): expose completion metrics and recent batches for richer summaries
 - fix(dashboard): serialize dataclass payloads without relying on __dict__

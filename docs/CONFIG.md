@@ -20,6 +20,7 @@ syncthing:
   api_url: http://127.0.0.1:8384/rest
   api_key: ""
   folder_id: ""
+  device_id: ""
   poll_interval_sec: 60
   auto_sort_after_sync: true
 sorter:
@@ -35,3 +36,7 @@ system:
   port_dbui: 8081
   cleanup_empty_batches: true
 ```
+
+- `syncthing.device_id` is optional but recommended when multiple downstream
+  devices share a folder. Populate it with the Syncthing device identifier so
+  completion polling and diagnostics target the expected peer.

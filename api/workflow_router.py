@@ -59,6 +59,14 @@ async def workflow_sort(
     }
 
 
+@router.post("/sync/refresh", response_model=dict)
+async def workflow_sync_refresh(
+    manager: WorkflowManager = Depends(get_manager),
+) -> dict:
+    batches = manager.orchestrator.refresh_syncing_batches()
+    return {"count": len(batches), "batches": batches}
+
+
 __all__ = [
     "router",
     "run_workflow",
@@ -66,4 +74,5 @@ __all__ = [
     "workflow_overview",
     "workflow_sync",
     "workflow_sort",
+    "workflow_sync_refresh",
 ]

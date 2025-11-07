@@ -99,8 +99,13 @@ Navigate to `http://<host>:8080/control` to open the new operations console. The
 - Inspect and edit `config.yaml` in-place with validation feedback.
 - Trigger the full workflow or individual modules (dedup, batch, sync, sort, cleanup).
 - Select the target batch by ID for sync/sort actions and review the last five batches at a glance.
+- Track the *Active Sync Progress* panel to see every batch still marked as `SYNCING`, complete with progress bars and the most recent Syncthing detail message.
+- Fire the **Refresh Sync Progress** button to poll Syncthing on-demand whenever batches appear stuck.
 - Monitor dedup status, aggregated file counts, and the results of the most recent workflow run without refreshing.
 - Jump straight to the `/dashboard` view for sparkline charts, progress bars, storage usage, and recent batch summaries.
+- Launch quick links to the dashboard, sqlite-web DB UI, API docs, or copy the effective config path for terminal work.
+- Copy fully-qualified URLs for `/dashboard`, `/control`, and the sqlite-web DB UI—handy when operating across subnets.
+- Run one-click Syncthing diagnostics (including REST status checks) and open the Syncthing UI directly from the control page.
 
 The page refreshes status snapshots automatically every five seconds and surfaces warnings inline when API calls fail.
 
@@ -153,16 +158,26 @@ curl http://<host>:8080/api/sort/status/BATCH_ID
 curl -X POST http://<host>:8080/api/cleanup/run
 ```
 
-> **Troubleshooting Syncthing auth errors:** The sync endpoints forward
-> requests to the Syncthing REST API using the `syncthing.api_url`,
-> `syncthing.api_key`, and `syncthing.folder_id` values from the active
-> configuration. If the service logs `Syncthing request failed (403 Forbidden -
-> unauthorized…)` ensure the API key matches the value shown in the Syncthing
-> GUI and that the Media Pipeline host appears under **Settings → Advanced →
-> GUI → API Key / Allowed Networks**. When a folder id is supplied the rescan
-> call targets `/rest/db/scan` with the batch directory as a relative
+> **Troubleshooting Syncthing:** The sync endpoints forward requests to the
+> Syncthing REST API using the `syncthing.api_url`, `syncthing.api_key`,
+> `syncthing.folder_id`, and optional `syncthing.device_id` values from the
+> active configuration. If the service logs `Syncthing request failed (403
+> Forbidden - unauthorized…)` ensure the API key matches the value shown in the
+> Syncthing GUI and that the Media Pipeline host appears under **Settings →
+> Advanced → GUI → API Key / Allowed Networks**. When a folder id is supplied the
+> rescan call targets `/rest/db/scan` with the batch directory as a relative
 > sub-directory; without it the workflow falls back to the legacy absolute path
-> scan.
+> scan. Setting `syncthing.device_id` ensures completion polling focuses on the
+> intended downstream peer.
+>
+> For deeper debugging, run `./scripts/debug.sh` to capture the active config
+> path, direct control/dashboard/sqlite-web URLs, Syncthing REST/UI addresses,
+> API key metadata, and live `/system/status` **and** `/db/completion` payloads.
+> The control center's **Syncthing Diagnostics** panel and the
+> `/api/sync/diagnostics` endpoint expose the same information over HTTP,
+> including the last error seen by the sync monitor. Both surfaces help confirm
+> that the API key is in use, the folder ID/device ID are correct, and that the
+> Syncthing instance is reachable from the pipeline host.
 
 Tip: while developing locally you can call these endpoints with the provided `./scripts/debug.sh` to confirm the database schema, log locations, and HTTP health probe responses.
 
@@ -199,7 +214,7 @@ Use the bundled debug helper to collect environment diagnostics when investigati
 ./scripts/debug.sh
 ```
 
-The script prints platform details, verifies Python and dependency versions, checks the SQLite schema, inspects recent log files, and exercises health endpoints. Its output can be attached to support requests or issue reports.
+The script prints platform details, verifies Python and dependency versions, checks the SQLite schema, inspects recent log files, lists shareable Web UI URLs, and exercises health endpoints alongside Syncthing status/completion checks. Its output can be attached to support requests or issue reports.
 
 ## Release Automation
 
