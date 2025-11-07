@@ -83,6 +83,10 @@ auth:
   api_key: ""
   header_name: x-api-key
 
+auth:
+  api_key: ""
+  header_name: x-api-key
+
 system:
   db_path: /var/lib/media-pipeline/db.sqlite
   log_dir: /var/log/media-pipeline
