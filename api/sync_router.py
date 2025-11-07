@@ -43,6 +43,7 @@ async def get_sync_service(request: Request) -> SyncService:
 @router.post("/start/{batch_id}", response_model=SyncStartResponse)
 async def start_sync(
     batch_id: int,
+    request: Request,
     service: SyncService = Depends(get_sync_service),
     request: Request,
 ) -> SyncStartResponse:
@@ -59,6 +60,7 @@ async def start_sync(
 @router.get("/status/{batch_id}", response_model=SyncStatusResponse)
 async def sync_status(
     batch_id: int,
+    request: Request,
     service: SyncService = Depends(get_sync_service),
     request: Request,
 ) -> SyncStatusResponse:
