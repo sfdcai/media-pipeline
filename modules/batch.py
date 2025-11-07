@@ -18,6 +18,7 @@ LOGGER = logging.getLogger(__name__)
 FILE_STATUS_BATCHED = "BATCHED"
 FILE_STATUS_SYNCED = "SYNCED"
 FILE_STATUS_SORTED = "SORTED"
+FILE_STATUS_ARCHIVED = "ARCHIVED"
 
 BATCH_STATUS_PENDING = "PENDING"
 BATCH_STATUS_SYNCING = "SYNCING"
@@ -95,6 +96,7 @@ class BatchService:
         selection_mode: str = "size",
         max_files: int | None = None,
         allow_parallel: bool = False,
+        transfer_mode: str = "move",
     ) -> None:
         self._db = db
         self._source_dir = Path(source_dir).expanduser().resolve()
@@ -106,6 +108,8 @@ class BatchService:
         self._selection_mode = mode if mode in {"size", "files", "count"} else "size"
         self._max_files = self._to_int(max_files)
         self._allow_parallel = bool(allow_parallel)
+        mode = (transfer_mode or "move").strip().lower()
+        self._transfer_mode = mode if mode in {"move", "copy"} else "move"
 
     # ------------------------------------------------------------------
     def create_batch(self) -> BatchCreationResult:
@@ -164,7 +168,7 @@ class BatchService:
             destination = batch_path / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
 
-            shutil.move(str(source_path), str(destination))
+            self._transfer_file(source_path, destination)
 
             moved_records.append(
                 BatchFileRecord(
@@ -385,6 +389,29 @@ class BatchService:
                     record.source_path,
                 ),
             ).close()
+            if self._transfer_mode == "copy":
+                self._archive_source(record)
+
+    def _archive_source(self, record: BatchFileRecord) -> None:
+        self._db.execute(
+            """
+            INSERT OR REPLACE INTO files(path, size, sha256, status, batch_id, target_path)
+            VALUES(?, ?, ?, ?, NULL, ?)
+            """,
+            (
+                record.source_path,
+                record.size,
+                record.sha256,
+                FILE_STATUS_ARCHIVED,
+                str(record.batch_path),
+            ),
+        ).close()
+
+    def _transfer_file(self, source: Path, destination: Path) -> None:
+        if self._transfer_mode == "copy":
+            shutil.copy2(str(source), str(destination))
+        else:
+            shutil.move(str(source), str(destination))
 
     def _relative_path(self, path: Path) -> Path:
         try:
@@ -420,6 +447,7 @@ __all__ = [
     "FILE_STATUS_BATCHED",
     "FILE_STATUS_SYNCED",
     "FILE_STATUS_SORTED",
+    "FILE_STATUS_ARCHIVED",
     "BATCH_STATUS_PENDING",
     "BATCH_STATUS_SYNCING",
     "BATCH_STATUS_SYNCED",

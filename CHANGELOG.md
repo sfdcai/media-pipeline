@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- feat(sync): add configurable Syncthing rescan delay so uploads settle before rescans fire
+- feat(batch/sort): support copy-or-move transfer modes and archive retained source files when copying
+- test: cover transfer-mode copy flows and the Syncthing rescan delay helper
+- docs: describe transfer modes, archived status, and rescan delays in README/CONFIG/SCHEMAS
 - fix(cleanup): restrict upload cleanup to empty batch directories that match the configured naming pattern
 - fix(workflow): retry batch creation after auto-sorting blocking synced batches and expose blocking batch id/status in API responses
 - test: cover cleanup filtering and the synced-batch retry path in workflow orchestration

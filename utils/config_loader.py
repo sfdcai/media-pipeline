@@ -38,6 +38,7 @@ def _load_default_config() -> Dict[str, Any]:
             "selection_mode": "size",
             "max_files": 0,
             "allow_parallel": False,
+            "transfer_mode": "move",
         },
         "dedup": {
             "hash_algorithm": "sha256",
@@ -51,10 +52,12 @@ def _load_default_config() -> Dict[str, Any]:
             "device_id": "",
             "poll_interval_sec": 60,
             "auto_sort_after_sync": True,
+            "rescan_delay_sec": 3,
         },
         "sorter": {
             "folder_pattern": "{year}/{month:02d}/{day:02d}",
             "exif_fallback": True,
+            "transfer_mode": "move",
         },
         "auth": {
             "api_key": "",

@@ -202,6 +202,9 @@ Key batch-related settings:
 - `batch.selection_mode` – Choose `size` (default) to limit batches by gigabytes or `files` to cap by file count.
 - `batch.max_size_gb` / `batch.max_files` – Respectively control the size threshold and the maximum files selected when the corresponding mode is active.
 - `batch.allow_parallel` – When `false` (default), `BatchService` refuses to start a new batch while another remains `PENDING`, `SYNCING`, `SYNCED`, `SORTING`, or `ERROR`. Set to `true` only when Syncthing watches multiple destinations and concurrent batches are acceptable.
+- `batch.transfer_mode` – Defaults to `move`. Switch to `copy` to leave originals in the source tree while staging mirrored copies in the Syncthing upload directory. The originals are marked as `ARCHIVED` in the database so future runs skip them.
+- `syncthing.rescan_delay_sec` – Adds a short pause between marking a batch as `SYNCING` and calling the Syncthing REST API so the watcher can notice freshly copied files before we poll completion.
+- `sorter.transfer_mode` – Mirrors the batch option and controls whether sorted files are copied (retaining the batch staging area) or moved into the final library.
 
 Refer to [`docs/CONFIG.md`](docs/CONFIG.md) for the full schema and guidance on overriding paths, deduplication settings, Syncthing credentials, and dashboard options.
 

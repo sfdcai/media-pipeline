@@ -85,6 +85,9 @@ def build_service_container(
         }
     else:
         batch_allow_parallel = bool(batch_allow_parallel_value)
+    batch_transfer_mode = get_config_value(
+        "batch", "transfer_mode", default="move", config=config_data
+    )
     batch_pattern = get_config_value(
         "batch", "naming_pattern", default="batch_{index:03d}", config=config_data
     )
@@ -110,6 +113,9 @@ def build_service_container(
     syncthing_device = get_config_value(
         "syncthing", "device_id", default="", config=config_data
     )
+    syncthing_delay = get_config_value(
+        "syncthing", "rescan_delay_sec", default=3, config=config_data
+    )
 
     database = DatabaseManager(db_path)
     dedup_service = DedupService(
@@ -130,6 +136,7 @@ def build_service_container(
         selection_mode=str(batch_selection_mode or "size"),
         max_files=batch_max_files,
         allow_parallel=batch_allow_parallel,
+        transfer_mode=str(batch_transfer_mode or "move"),
     )
     sync_service = SyncService(
         database,
@@ -137,6 +144,7 @@ def build_service_container(
         syncthing_api=syncthing_api,
         folder_id=str(syncthing_folder or "").strip() or None,
         device_id=str(syncthing_device or "").strip() or None,
+        rescan_delay=float(syncthing_delay or 0),
     )
     sort_service = SortService(
         database,
@@ -144,6 +152,10 @@ def build_service_container(
         sorted_dir=sorted_dir,
         folder_pattern=str(folder_pattern),
         exif_fallback=exif_fallback,
+        transfer_mode=str(
+            get_config_value("sorter", "transfer_mode", default="move", config=config_data)
+            or "move"
+        ),
     )
     cleanup_service = CleanupService(
         batch_dir=batch_dir,

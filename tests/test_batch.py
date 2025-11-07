@@ -8,7 +8,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from api.batch_router import create_batch
-from modules.batch import BatchService, FILE_STATUS_BATCHED, BATCH_STATUS_PENDING
+from modules.batch import (
+    BatchService,
+    FILE_STATUS_ARCHIVED,
+    FILE_STATUS_BATCHED,
+    BATCH_STATUS_PENDING,
+)
 from modules.dedup import FILE_STATUS_UNIQUE
 from utils.db_manager import DatabaseManager
 
@@ -83,6 +88,58 @@ def test_batch_service_creates_manifest_and_moves_files(tmp_path: Path) -> None:
 
     second = service.create_batch()
     assert second.created is False
+
+    db.close()
+
+
+def test_batch_service_copy_mode_preserves_source(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    batch_dir = tmp_path / "batches"
+    db = DatabaseManager(tmp_path / "db.sqlite")
+
+    file_one = source_dir / "one.txt"
+    file_two = source_dir / "two.txt"
+    file_one.write_text("alpha", encoding="utf-8")
+    file_two.write_text("beta", encoding="utf-8")
+
+    _insert_file(db, file_one, file_one.stat().st_size, "sha-one")
+    _insert_file(db, file_two, file_two.stat().st_size, "sha-two")
+
+    service = BatchService(
+        db,
+        source_dir=source_dir,
+        batch_dir=batch_dir,
+        transfer_mode="copy",
+    )
+
+    result = service.create_batch()
+
+    assert result.created is True
+    assert file_one.exists()
+    assert file_two.exists()
+
+    assert result.batch_name is not None
+    batch_path = batch_dir / result.batch_name
+    assert batch_path.exists()
+    assert (batch_path / "one.txt").exists()
+    assert (batch_path / "two.txt").exists()
+
+    rows = db.fetchall(
+        "SELECT path, status, batch_id, target_path FROM files ORDER BY path"
+    )
+    archived = [row for row in rows if row["status"] == FILE_STATUS_ARCHIVED]
+    batched = [row for row in rows if row["status"] == FILE_STATUS_BATCHED]
+
+    assert len(archived) == 2
+    for row in archived:
+        assert row["batch_id"] is None
+        assert row["target_path"] and Path(row["target_path"]).exists()
+
+    assert len(batched) == 2
+    for row in batched:
+        assert row["batch_id"]
+        assert Path(row["path"]).exists()
 
     db.close()
 

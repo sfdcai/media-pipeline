@@ -89,7 +89,7 @@ def test_sync_service_transitions_status(tmp_path: Path) -> None:
     _insert_file(db, file_path, batch_id)
 
     api = StubSyncthingAPI()
-    service = SyncService(db, batch_dir=batch_dir, syncthing_api=api)
+    service = SyncService(db, batch_dir=batch_dir, syncthing_api=api, rescan_delay=0)
 
     start_result = service.start("batch_001")
     assert start_result.started is True
@@ -139,6 +139,7 @@ def test_sync_service_respects_folder_id(tmp_path: Path) -> None:
         batch_dir=batch_dir,
         syncthing_api=api,
         folder_id="media-folder",
+        rescan_delay=0,
     )
 
     service.start(batch_name)
@@ -181,6 +182,7 @@ def test_sync_service_uses_device_id(tmp_path: Path) -> None:
         syncthing_api=api,
         folder_id="folder-a",
         device_id="DEVICE42",
+        rescan_delay=0,
     )
 
     service.status(batch_name)
@@ -213,7 +215,7 @@ def test_sync_service_reports_detail_on_error(tmp_path: Path) -> None:
 
     api = StubSyncthingAPI()
     api.raise_completion = SyncthingAPIError("Syncthing request failed (403 Forbidden - unauthorized)")
-    service = SyncService(db, batch_dir=batch_dir, syncthing_api=api)
+    service = SyncService(db, batch_dir=batch_dir, syncthing_api=api, rescan_delay=0)
 
     status = service.status(batch_name)
     assert status.detail
@@ -235,6 +237,7 @@ def test_sync_diagnostics_include_last_error(tmp_path: Path) -> None:
         syncthing_api=api,
         folder_id="folder-a",
         device_id="device-a",
+        rescan_delay=0,
     )
 
     service._last_error = "Syncthing request failed (403 Forbidden)"  # type: ignore[attr-defined]
@@ -283,7 +286,7 @@ def test_refresh_syncing_batches_marks_completion(tmp_path: Path) -> None:
     api = StubSyncthingAPI()
     api.completion = 100.0
 
-    service = SyncService(db, batch_dir=batch_dir, syncthing_api=api)
+    service = SyncService(db, batch_dir=batch_dir, syncthing_api=api, rescan_delay=0)
 
     refreshed = service.refresh_syncing_batches()
 
@@ -293,5 +296,36 @@ def test_refresh_syncing_batches_marks_completion(tmp_path: Path) -> None:
 
     row = db.fetchone("SELECT status FROM batches WHERE id = ?", (batch_id,))
     assert row["status"] == BATCH_STATUS_SYNCED
+
+    db.close()
+
+
+def test_sync_service_respects_rescan_delay(monkeypatch, tmp_path: Path) -> None:
+    db = DatabaseManager(tmp_path / "db.sqlite")
+    batch_dir = tmp_path / "batches"
+    batch_name = "batch_delay"
+    batch_id = _insert_batch(db, batch_dir, batch_name)
+    file_path = batch_dir / batch_name / "photo.jpg"
+    file_path.write_text("payload", encoding="utf-8")
+    _insert_file(db, file_path, batch_id)
+
+    calls: list[float] = []
+
+    def fake_sleep(seconds: float) -> None:
+        calls.append(seconds)
+
+    monkeypatch.setattr("modules.sync_monitor.time.sleep", fake_sleep)
+
+    api = StubSyncthingAPI()
+    service = SyncService(
+        db,
+        batch_dir=batch_dir,
+        syncthing_api=api,
+        rescan_delay=1.25,
+    )
+
+    service.start(batch_name)
+
+    assert calls == [1.25]
 
     db.close()

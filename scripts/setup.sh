@@ -59,6 +59,7 @@ paths:
 batch:
   max_size_gb: 15
   naming_pattern: batch_{index:03d}
+  transfer_mode: move
 
 dedup:
   hash_algorithm: sha256
@@ -71,10 +72,16 @@ syncthing:
   folder_id: ""
   poll_interval_sec: 60
   auto_sort_after_sync: true
+  rescan_delay_sec: 3
 
 sorter:
   folder_pattern: "{year}/{month:02d}/{day:02d}"
   exif_fallback: true
+  transfer_mode: move
+
+auth:
+  api_key: ""
+  header_name: x-api-key
 
 auth:
   api_key: ""

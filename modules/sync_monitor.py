@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -60,6 +61,7 @@ class SyncService:
         *,
         folder_id: str | None = None,
         device_id: str | None = None,
+        rescan_delay: float | int = 0,
     ) -> None:
         self._db = db
         self._batch_dir = Path(batch_dir).expanduser().resolve()
@@ -68,6 +70,11 @@ class SyncService:
         self._folder_id = folder_id.strip() if folder_id else None
         self._device_id = device_id.strip() if device_id else None
         self._last_error: str | None = None
+        try:
+            delay_value = float(rescan_delay)
+        except (TypeError, ValueError):
+            delay_value = 0.0
+        self._rescan_delay = max(0.0, delay_value)
 
     # ------------------------------------------------------------------
     def start(self, batch_name: str) -> SyncStartResult:
@@ -91,6 +98,9 @@ class SyncService:
             "UPDATE batches SET status = ?, synced_at = NULL WHERE name = ?",
             (BATCH_STATUS_SYNCING, batch_name),
         ).close()
+
+        if self._rescan_delay > 0:
+            time.sleep(self._rescan_delay)
 
         if self._folder_id:
             try:
