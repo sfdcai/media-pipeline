@@ -15,6 +15,7 @@ from utils.exif_tools import extract_capture_datetime
 from .batch import (
     BATCH_STATUS_SORTED,
     BATCH_STATUS_SORTING,
+    FILE_STATUS_ARCHIVED,
     FILE_STATUS_BATCHED,
     FILE_STATUS_SORTED,
     FILE_STATUS_SYNCED,
@@ -54,6 +55,7 @@ class SortService:
         *,
         folder_pattern: str = "{year}/{month:02d}/{day:02d}",
         exif_fallback: bool = True,
+        transfer_mode: str = "move",
     ) -> None:
         self._db = db
         self._batch_dir = Path(batch_dir).expanduser().resolve()
@@ -61,6 +63,8 @@ class SortService:
         self._sorted_dir.mkdir(parents=True, exist_ok=True)
         self._folder_pattern = folder_pattern
         self._exif_fallback = exif_fallback
+        mode = (transfer_mode or "move").strip().lower()
+        self._transfer_mode = mode if mode in {"move", "copy"} else "move"
 
     # ------------------------------------------------------------------
     def start(self, batch_name: str) -> SortResult:
@@ -78,7 +82,7 @@ class SortService:
 
         files = self._db.fetchall(
             "SELECT rowid, path, target_path, status, exif_datetime FROM files WHERE batch_id = ?",
-            (record["rowid"],),
+            (record["id"],),
         )
 
         sorted_count = 0
@@ -116,7 +120,7 @@ class SortService:
                 if path.resolve() != destination.resolve():
                     destination = self._resolve_collision(destination)
 
-            shutil.move(str(path), str(destination))
+            self._transfer_file(path, destination)
             sorted_count += 1
 
             capture_iso = capture.isoformat()
@@ -135,6 +139,8 @@ class SortService:
                     record["rowid"],
                 ),
             ).close()
+            if self._transfer_mode == "copy":
+                self._archive_previous(path, destination)
 
         sorted_at = datetime.now(timezone.utc).isoformat()
         self._db.execute(
@@ -157,7 +163,7 @@ class SortService:
 
         files = self._db.fetchall(
             "SELECT status FROM files WHERE batch_id = ?",
-            (record["rowid"],),
+            (record["id"],),
         )
         total = len(files)
         sorted_count = sum(1 for row in files if row["status"] == FILE_STATUS_SORTED)
@@ -169,15 +175,34 @@ class SortService:
             sorted_files=sorted_count,
         )
 
+    def _archive_previous(self, original: Path, destination: Path) -> None:
+        try:
+            size = original.stat().st_size
+        except FileNotFoundError:
+            return
+        self._db.execute(
+            """
+            INSERT OR REPLACE INTO files(path, size, status, batch_id, target_path)
+            VALUES(?, ?, ?, NULL, ?)
+            """,
+            (str(original), size, FILE_STATUS_ARCHIVED, str(destination)),
+        ).close()
+
+    def _transfer_file(self, source: Path, destination: Path) -> None:
+        if self._transfer_mode == "copy":
+            shutil.copy2(str(source), str(destination))
+        else:
+            shutil.move(str(source), str(destination))
+
     # ------------------------------------------------------------------
     def _get_batch(self, batch_name: str) -> Optional[dict[str, str]]:
         row = self._db.fetchone(
-            "SELECT rowid, status FROM batches WHERE name = ?",
+            "SELECT id, status FROM batches WHERE name = ?",
             (batch_name,),
         )
         if row is None:
             return None
-        return {"rowid": row["rowid"], "status": row["status"]}
+        return {"id": int(row["id"]), "status": row["status"]}
 
     def _determine_destination(
         self, path: Path, row: dict[str, object]

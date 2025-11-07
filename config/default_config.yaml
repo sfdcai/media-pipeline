@@ -1,0 +1,45 @@
+paths:
+  source_dir: /mnt/nas/photos_raw
+  duplicates_dir: /mnt/nas/duplicates
+  batch_dir: /mnt/nas/syncthing/upload
+  sorted_dir: /mnt/nas/photos_sorted
+  temp_dir: /opt/media-pipeline/data/temp
+
+batch:
+  max_size_gb: 15
+  naming_pattern: batch_{index:03d}
+  selection_mode: size
+  max_files: 0
+  allow_parallel: false
+  transfer_mode: move
+
+dedup:
+  hash_algorithm: sha256
+  threads: 4
+  move_duplicates: true
+
+syncthing:
+  api_url: http://127.0.0.1:8384/rest
+  api_key: ""
+  folder_id: ""
+  device_id: ""
+  poll_interval_sec: 60
+  auto_sort_after_sync: true
+  rescan_delay_sec: 3
+
+sorter:
+  folder_pattern: "{year}/{month:02d}/{day:02d}"
+  exif_fallback: true
+  transfer_mode: move
+
+auth:
+  api_key: ""
+  header_name: x-api-key
+
+system:
+  db_path: /var/lib/media-pipeline/db.sqlite
+  log_dir: /var/log/media-pipeline
+  port_api: 8080
+  port_dbui: 8081
+  max_parallel_fs_ops: 4
+  cleanup_empty_batches: true
