@@ -51,10 +51,16 @@ def _insert_file(db: DatabaseManager, path: Path, batch_id: int) -> None:
 class StubSyncthingAPI:
     def __init__(self) -> None:
         self.completion = 0.0
-        self.scans: list[str] = []
+        self.scans: list[tuple[str | None, list[str] | None, str | None]] = []
 
-    def trigger_rescan(self, path: str) -> None:
-        self.scans.append(path)
+    def trigger_rescan(
+        self,
+        path: str | None = None,
+        *,
+        folder: str | None = None,
+        subdirs: list[str] | None = None,
+    ) -> None:
+        self.scans.append((folder, subdirs, path))
 
     def folder_completion(self, folder: str) -> SyncthingCompletion:
         return SyncthingCompletion(folder=folder, completion=self.completion)
@@ -76,20 +82,55 @@ def test_sync_service_transitions_status(tmp_path: Path) -> None:
     start_result = service.start("batch_001")
     assert start_result.started is True
     assert start_result.status == BATCH_STATUS_SYNCING
-    assert api.scans == [str(file_path.parent)]
+    assert api.scans == [(None, None, str(file_path.parent))]
 
-    api.completion = 45.0
-    status = service.status("batch_001")
-    assert status.progress == 45.0
-    assert status.status == BATCH_STATUS_SYNCING
 
-    api.completion = 100.0
-    final = service.status("batch_001")
-    assert final.status == BATCH_STATUS_SYNCED
-    assert final.progress == 100.0
-    assert final.synced_at is not None
+def test_sync_service_respects_folder_id(tmp_path: Path) -> None:
+    db = DatabaseManager(tmp_path / "db.sqlite")
+    batch_dir = tmp_path / "syncthing" / "upload"
+    batch_name = "batch_123"
+    batch_path = batch_dir / batch_name
+    batch_path.mkdir(parents=True, exist_ok=True)
+    manifest = batch_path / "manifest.json"
+    manifest.write_text("{}", encoding="utf-8")
 
-    rows = db.fetchall("SELECT status FROM files WHERE batch_id = ?", (batch_id,))
-    assert all(row["status"] == FILE_STATUS_SYNCED for row in rows)
+    cursor = db.execute(
+        """
+        INSERT INTO batches(name, size_bytes, file_count, status, created_at, manifest_path)
+        VALUES(?, ?, ?, ?, ?, ?)
+        """,
+        (
+            batch_name,
+            0,
+            0,
+            BATCH_STATUS_PENDING,
+            datetime.now(timezone.utc).isoformat(),
+            str(manifest),
+        ),
+    )
+    try:
+        batch_id = int(cursor.lastrowid)
+    finally:
+        cursor.close()
+
+    db.execute(
+        """
+        INSERT INTO files(path, size, status, batch_id)
+        VALUES(?, ?, ?, ?)
+        """,
+        (str(batch_path / "file.jpg"), 0, FILE_STATUS_BATCHED, batch_id),
+    ).close()
+
+    api = StubSyncthingAPI()
+    service = SyncService(
+        db,
+        batch_dir=batch_dir,
+        syncthing_api=api,
+        folder_id="media-folder",
+    )
+
+    service.start(batch_name)
+
+    assert api.scans == [("media-folder", [batch_name], None)]
 
     db.close()

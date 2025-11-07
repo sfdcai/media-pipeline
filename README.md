@@ -153,6 +153,17 @@ curl http://<host>:8080/api/sort/status/BATCH_ID
 curl -X POST http://<host>:8080/api/cleanup/run
 ```
 
+> **Troubleshooting Syncthing auth errors:** The sync endpoints forward
+> requests to the Syncthing REST API using the `syncthing.api_url`,
+> `syncthing.api_key`, and `syncthing.folder_id` values from the active
+> configuration. If the service logs `Syncthing request failed (403 Forbidden -
+> unauthorized…)` ensure the API key matches the value shown in the Syncthing
+> GUI and that the Media Pipeline host appears under **Settings → Advanced →
+> GUI → API Key / Allowed Networks**. When a folder id is supplied the rescan
+> call targets `/rest/db/scan` with the batch directory as a relative
+> sub-directory; without it the workflow falls back to the legacy absolute path
+> scan.
+
 Tip: while developing locally you can call these endpoints with the provided `./scripts/debug.sh` to confirm the database schema, log locations, and HTTP health probe responses.
 
 ### Syncthing accessibility tweaks

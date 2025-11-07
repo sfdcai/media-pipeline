@@ -77,7 +77,17 @@ class SyncService:
             (BATCH_STATUS_SYNCING, batch_name),
         ).close()
 
-        self._syncthing.trigger_rescan(str(batch_path))
+        if self._folder_id:
+            try:
+                relative = str(batch_path.relative_to(self._batch_dir))
+            except ValueError:
+                relative = batch_name
+            self._syncthing.trigger_rescan(
+                folder=self._folder_id,
+                subdirs=[relative],
+            )
+        else:
+            self._syncthing.trigger_rescan(str(batch_path))
 
         return SyncStartResult(batch=batch_name, started=True, status=BATCH_STATUS_SYNCING)
 

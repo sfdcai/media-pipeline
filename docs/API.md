@@ -59,7 +59,12 @@ skipped. Responses mirror the structure used by the CLI/control center and inclu
 Trigger a Syncthing rescan for the batch directory. Marks the batch status as
 `SYNCING` and leaves file entries untouched until the remote completion reaches
 100%. The id maps to the `batches.id` column; the service resolves the matching
-batch name internally.
+batch name internally. When `syncthing.folder_id` is configured the service
+asks Syncthing to rescan that folder with the batch directory as a relative
+sub-directory; otherwise it falls back to the legacy absolute path scan. A
+`401`/`403` response from Syncthing is surfaced as `Syncthing request failed
+(403 Forbidden - unauthorized…)` – double-check the configured API key and that
+the Media Pipeline host is present in Syncthing's allowed API clients list.
 
 ### GET /api/sync/status/{batch_id}
 

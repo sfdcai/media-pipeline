@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- fix(sync): use folder-aware rescans, trim API keys, and surface actionable Syncthing 401/403 guidance
 - feat(dashboard): expose completion metrics and recent batches for richer summaries
 - fix(dashboard): serialize dataclass payloads without relying on __dict__
 - feat(ui): redesign /dashboard with headline cards, charts, and recent batch table
