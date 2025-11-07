@@ -27,6 +27,8 @@ class BatchCreateResponse(BaseModel):
     manifest_path: str | None = None
     created_at: str | None = None
     files: list[BatchFileModel] = Field(default_factory=list)
+    reason: str | None = None
+    blocking_batch: str | None = None
 
 
 async def get_batch_service(request: Request) -> BatchService:

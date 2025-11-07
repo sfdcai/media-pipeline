@@ -52,22 +52,28 @@ class BatchCreationResult:
     """Result returned after attempting to create a batch."""
 
     created: bool
+    batch_id: Optional[int] = None
     batch_name: Optional[str] = None
     file_count: int = 0
     size_bytes: int = 0
     manifest_path: Optional[str] = None
     created_at: Optional[str] = None
     files: List[BatchFileRecord] = field(default_factory=list)
+    reason: Optional[str] = None
+    blocking_batch: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "created": self.created,
+            "batch_id": self.batch_id,
             "batch_name": self.batch_name,
             "file_count": self.file_count,
             "size_bytes": self.size_bytes,
             "manifest_path": self.manifest_path,
             "created_at": self.created_at,
             "files": [record.to_dict() for record in self.files],
+            "reason": self.reason,
+            "blocking_batch": self.blocking_batch,
         }
 
 
@@ -81,6 +87,10 @@ class BatchService:
         batch_dir: Path,
         max_size_gb: float = 15,
         naming_pattern: str = "batch_{index:03d}",
+        *,
+        selection_mode: str = "size",
+        max_files: int | None = None,
+        allow_parallel: bool = False,
     ) -> None:
         self._db = db
         self._source_dir = Path(source_dir).expanduser().resolve()
@@ -88,9 +98,28 @@ class BatchService:
         self._batch_dir.mkdir(parents=True, exist_ok=True)
         self._naming_pattern = naming_pattern
         self._max_size_bytes = self._to_bytes(max_size_gb)
+        mode = (selection_mode or "size").strip().lower()
+        self._selection_mode = mode if mode in {"size", "files", "count"} else "size"
+        self._max_files = self._to_int(max_files)
+        self._allow_parallel = bool(allow_parallel)
 
     # ------------------------------------------------------------------
     def create_batch(self) -> BatchCreationResult:
+        if not self._allow_parallel:
+            guard = self._active_batch_guard()
+            if guard is not None:
+                name, status = guard
+                message = (
+                    f"Batch '{name}' is still {status.lower()}"
+                    if status
+                    else "Another batch is still in progress"
+                )
+                return BatchCreationResult(
+                    created=False,
+                    reason=message,
+                    blocking_batch=name,
+                )
+
         candidates = self._fetch_candidates()
         selected = self._select_within_limit(candidates)
 
@@ -177,6 +206,7 @@ class BatchService:
 
         return BatchCreationResult(
             created=True,
+            batch_id=batch_rowid,
             batch_name=batch_name,
             file_count=len(moved_records),
             size_bytes=total_size,
@@ -203,40 +233,75 @@ class BatchService:
     ) -> list[dict[str, Any]]:
         selected: list[dict[str, Any]] = []
         running_size = 0
-        limit = self._max_size_bytes
+        limit_bytes = self._max_size_bytes if self._selection_mode == "size" else 0
+        limit_files = self._max_files if self._selection_mode in {"files", "count"} else 0
 
         for row in candidates:
-            size_value = row.get("size")
-            if size_value is None or int(size_value) <= 0:
-                path_str = row.get("path")
-                if not path_str:
-                    continue
-                try:
-                    size_value = Path(path_str).stat().st_size
-                except FileNotFoundError:
-                    LOGGER.warning(
-                        "Skipping file missing during size check",
-                        extra={"path": path_str},
-                    )
-                    continue
+            normalized = self._normalize_candidate(row)
+            if normalized is None:
+                continue
 
-            size_int = int(size_value)
+            if limit_files and len(selected) >= limit_files:
+                break
 
-            if limit and running_size + size_int > limit:
+            size_int = normalized["size"]
+
+            if limit_bytes and running_size + size_int > limit_bytes:
                 if selected:
                     break
-                if size_int > limit:
+                if size_int > limit_bytes:
                     LOGGER.warning(
                         "Skipping file larger than batch limit",
-                        extra={"path": row.get("path"), "size": size_int},
+                        extra={"path": normalized.get("path"), "size": size_int},
                     )
                     continue
 
-            selected.append(row)
-            row["size"] = size_int
+            selected.append(normalized)
             running_size += size_int
 
+            if limit_files and len(selected) >= limit_files:
+                break
+
         return selected
+
+    def _normalize_candidate(self, row: dict[str, Any]) -> dict[str, Any] | None:
+        size_value = row.get("size")
+        if size_value is None or int(size_value) <= 0:
+            path_str = row.get("path")
+            if not path_str:
+                return None
+            try:
+                size_value = Path(path_str).stat().st_size
+            except FileNotFoundError:
+                LOGGER.warning(
+                    "Skipping file missing during size check",
+                    extra={"path": path_str},
+                )
+                return None
+
+        row["size"] = int(size_value)
+        return row
+
+    def _active_batch_guard(self) -> tuple[str, str] | None:
+        row = self._db.fetchone(
+            """
+            SELECT name, status
+            FROM batches
+            WHERE status IN (?, ?, ?, ?, ?)
+            ORDER BY datetime(created_at) ASC
+            LIMIT 1
+            """,
+            (
+                BATCH_STATUS_PENDING,
+                BATCH_STATUS_SYNCING,
+                BATCH_STATUS_SYNCED,
+                BATCH_STATUS_SORTING,
+                BATCH_STATUS_ERROR,
+            ),
+        )
+        if row is None:
+            return None
+        return str(row["name"]), str(row["status"])
 
     def _generate_batch_name(self) -> str:
         index = 1
@@ -319,6 +384,16 @@ class BatchService:
         if size_float <= 0:
             return 0
         return int(size_float * (1024 ** 3))
+
+    @staticmethod
+    def _to_int(value: int | float | str | None) -> int:
+        if value is None:
+            return 0
+        try:
+            number = int(value)
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            return 0
+        return max(0, number)
 
 
 __all__ = [

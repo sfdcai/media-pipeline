@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
@@ -28,7 +30,7 @@ async def run_cleanup(
     service: CleanupService = Depends(get_cleanup_service),
 ) -> CleanupResponse:
     result = service.run()
-    return CleanupResponse(**result.__dict__)
+    return CleanupResponse(**asdict(result))
 
 
 __all__ = ["router", "run_cleanup"]

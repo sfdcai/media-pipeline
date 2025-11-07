@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -17,6 +18,7 @@ class DashboardSummaryModel(BaseModel):
     files: dict[str, Any]
     batches: dict[str, Any]
     storage: dict[str, Any]
+    recent_batches: list[dict[str, Any]]
 
 
 async def get_dashboard_service(request: Request) -> DashboardService:
@@ -31,7 +33,7 @@ async def get_dashboard_summary(
     service: DashboardService = Depends(get_dashboard_service),
 ) -> DashboardSummaryModel:
     summary = service.summary()
-    return DashboardSummaryModel(**summary.__dict__)
+    return DashboardSummaryModel(**asdict(summary))
 
 
 __all__ = ["router", "get_dashboard_summary"]
