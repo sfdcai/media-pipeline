@@ -1,140 +1,176 @@
-# pixel backup gang
+# 🚀 Pixel 1 OG & Linux Media Lifecycle Pipeline
+> **Automated iPhone ↔ iCloud ↔ NAS ↔ Google Photos Unlimited Original Quality Backup & Storage Optimization Architecture**
 
-augment the OG pixel's internal storage with an external drive
+![Version](https://img.shields.io/badge/Version-v2.2.0-00f0ff?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-00ff88?style=for-the-badge)
+![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Linux%20%7C%20FastAPI%20%7C%20Kotlin-0082ff?style=for-the-badge)
 
-> [!WARNING]  
-> this code is experimental and there is no guarantee that it works. rooting your phone or running any commands as root can be very dangerous. you have been warned.
+---
 
-anyway here is a demo image of an SSD mounted into the "internal storage" on my Pixel XL. the data is readable & writable in the Google Photos app.
-> #### "You freed up 593 GB"
-> ![image](assets/demo.jpg)
+## 💡 The Vision & The Problem
 
+High-resolution 4K iPhone videos and photos consume huge amounts of iCloud storage, quickly forcing upgrades to expensive paid cloud plans ($9.99+/month). 
 
-## why? 🤔
-from [google support](https://web.archive.org/web/20250725010242/https://support.google.com/photos/answer/6220791?co=GENIE.Platform%3DAndroid&oco=1#zippy=%2Cpixel-st-generation):
->
-> > **Pixel (1st generation)**  
-> >> You get unlimited storage in Original quality at no charge. You won’t be able to back up in Storage saver.
+The **Pixel 1 OG (marlin)** features a permanent, lifetime perk granted by Google: **unlimited, full-resolution, original-quality Google Photos backups for life** for any photo or video uploaded directly from the device.
 
-everyone needs storage. and everyone likes no charge. this sounds great! just back up your data through the device using the Google Photos app. but there's a catch - the Google Photos app pretends it can only see files located in the device's internal storage.
+This project connects an iPhone, Linux Home Server, NAS Vault, and rooted Pixel 1 XL into a **self-healing, zero-cost, 24/7 automated media lifecycle pipeline**.
 
-so everybody painstakingly copies their media into to their pixel's internal storage to get it backed up. some copy photos using FAT32 usb drives. some use FTP transfers. many use [syncthing](https://github.com/syncthing/syncthing) for automation. but i got fed up of transferring photos & videos over unreliable & slow network connections, just to drastically & unnecessarily shorten the flash memory's [limited lifetime](https://en.wikipedia.org/wiki/Flash_memory#Memory_wear). So i started looking into ways to get my unlimited storage without destroying my pixel in the process.
-
-android is kinda just linux, right? so my first thought was to use [NFS](https://en.wikipedia.org/wiki/Network_File_System) to mount a remote filesystem. puny apps won't be able to tell the difference.
-
-
-> #### "After all, why not? why shouldn't i mount a multi terabyte NAS into the DCIM folder on a 32 GB pixel?"
-> ![bilbo](./assets/bilbo.jpg)
-
-alas, the Pixel's kernel wasn't compiled with NFS support (`cat /proc/filesystems`). We can actually add NFS support at runtime using a [loadable kernel module](https://source.android.com/docs/core/architecture/kernel/loadable-kernel-modules) - however i believe such a module needs to be signed by Google on the stock OS due to [Android Verified Boot](https://source.android.com/docs/security/features/verifiedboot/avb). i then looked into using [FUSE](https://en.wikipedia.org/wiki/Filesystem_in_Userspace) based solutions. There are userspace nfs clients like [nfs-ganesha](https://github.com/nfs-ganesha/nfs-ganesha) & local filesystem mounting solutions like [bindfs](https://github.com/mpartel/bindfs) (via [termux root-packages](https://github.com/termux/termux-packages/tree/817ccec622c510929e339285eb5400dbb5b2f4c7/root-packages/bindfs)) and [fuse-nfs](https://github.com/sahlberg/fuse-nfs.git) (complicated to compile for android so i built my own minimal version in Rust). this works and is especially good at sidestepping android 10's selinux policies. however i found FUSE's performance on the pixel to be incredibly slow. (note: i have not tried fbind but i don't think that works out of the box here without using FUSE)
-
-so i spent some time figuring out a way to get files on external storage drives to show up to apps as if they are stored in the internal storage. this method is basically a set of hacks around the app sandbox (+ selinux policies in case of ext4) to **add an external storage drive into the device's internal storage**.
-
-(if you don't care about using this automation and just want to see how it's done to do it yourself, take a look at [mount_ext4.sh](scripts/mount_ext4.sh))
-
-### the good
-* works with the stock kernel
-* backs up external files larger than 4gb (stock OS only supports FAT32 for external drives)
-* reduces wear on internal flash storage by up to 50% (see https://github.com/master-hax/pixel-backup-gang/issues/30)
-* can prevent the device from overheating - the external drive gets hot instead
-* makes 32gb pixels viable for mass backup
-
-### the bad
-* phone needs to be rooted
-* there's currently no way to auto-mount when the disk is connected
-
-### the ugly
-* there's no GUI, you need to execute shell scripts
-
-## prerequisites
-* a Google Pixel (sailfish) or Google Pixel XL (marlin) on Android 10, rooted with [Magisk](https://github.com/topjohnwu/Magisk). may work on other phones with other versions of android (see https://github.com/master-hax/pixel-backup-gang/pull/33).
-* a USB storage drive formatted with an ext4 or FAT32 filesystem.
-
-#### formatting a drive as ext4 (for macOS)
-first install `e2fsprogs` with `brew install e2fsprogs`
-
-then find your drive mount with `diskutil list`
-
-finally format as ext4 with this command (change the name and target disk)
 ```
-sudo $(brew --prefix e2fsprogs)/sbin/mkfs.ext4 -L "NAME_OF_DRIVE" -O ^metadata_csum,^64bit /dev/TARGET_DISK
+                           +-------------------------------------+
+                           |            iPhone 15/16             |
+                           |   (Heavy 4K Videos & Live Photos)   |
+                           +------------------+------------------+
+                                              |
+                                              v
+                           +-------------------------------------+
+                           |              iCloud                 |
+                           +------------------+------------------+
+                                              |
+                                              v (1. icloudpd Automated Pull)
++---------------------------------------------------------------------------------------------------+
+|                                 LINUX MEDIA ORCHESTRATOR (THE BRAIN)                              |
+|                                     FastAPI Web UI :8000 Dashboard                                |
+|                                                                                                   |
+|  - EXIF Date Organizer   - Metadata Preservation Engine (.meta.json)   - Tiered Compression       |
+|  - 3-Gate Deletion Check - Pixel Watchdog & Dynamic ADB Discovery       - Telemetrics & Savings    |
++-----------------------------------+---------------------------------------------------------------+
+                                    |                                       |
+          (2. Save Originals)       |                                       | (3. Push 100-File Chunks)
+                                    v                                       v
+        +---------------------------------------+       +---------------------------------------+
+        |            NAS STORAGE VAULT          |       |           PIXEL 1 OG (MARLIN)         |
+        |         (Sorted/YYYY/MM/DD)           |       |      PixelBackupManager Android App    |
+        |        *Permanent Untouched*          |       |          Ktor REST Server :8080       |
+        +---------------------------------------+       +-------------------+-------------------+
+                                                                            |
+                                                                            | (4. Hard Link & Scan)
+                                                                            v
+                                                        +---------------------------------------+
+                                                        |           GOOGLE PHOTOS CLOUD         |
+                                                        |    *Free Unlimited Original Backup*   |
+                                                        +---------------------------------------+
 ```
 
-## installation
+---
 
-installation is essentially just copying the scripts to the device & making them executable. you can do this manually, or use one of the automated steps below. you also probably want to disable [Google Play Protect](https://developers.google.com/android/play-protect) scanning in the Play Store menu.
+## 🛠️ Hard-Won Engineering Lessons & Battle Scars
 
-### from internet via pixel terminal (more convenient, doesn't require a separate computer, but a little sus)
-1. start a terminal application and navigate to the directory where you want to install the scripts
-1. run the following command:
+Building this pipeline required overcoming severe Android kernel, filesystem, and Google Photos constraints:
 
-```sh -c "$(curl -fSs https://raw.githubusercontent.com/master-hax/pixel-backup-gang/install/install.sh)"```
+### 1. The Mount Namespace Trap (`nsenter -t 1 -m --`)
+* **Problem:** Mounts executed via standard ADB shell executed inside a private mount namespace. Shell `ls` showed the files, but Google Photos and `sdcardfs` showed 0 files.
+* **Solution:** All mounts in `MountHelper.kt` run in the global `init` (PID 1) mount namespace via `nsenter -t 1 -m -- toybox mount -t sdcardfs ... /mnt/runtime/write/emulated/0/DCIM/Camera`.
 
-this one-liner runs a small installer script that downloads the latest release archive from github, unpacks it, then makes the contents executable. the current install script can be viewed [here](https://github.com/master-hax/pixel-backup-gang/blob/install/install.sh). piping strange scripts from the web into a root shell is generally not a good idea, but it is convenient. try not to make a habit of it. 😅
+### 2. The EXIF Timestamp Corruption Trap (Hard Links vs Copies)
+* **Problem:** Standard `cp -rp` through Android's `sdcardfs` silently drops filesystem `mtime`. For large 4K files where Google Photos' EXIF parser timed out, Photos fell back to file `mtime` (now "today"), corrupting photo timelines.
+* **Solution:** Instantaneous hard links (`os.link()`) on the ext4 partition. Hard links preserve exact timestamps, cost 0ms, and cause zero NAND wear on internal storage.
 
-### from local repository via adb (preferred, works offline, allows changes, more secure, but requires a separate computer running Linux)
-1. install the following software: `adb make shellcheck tar` (requires a separate computer running Linux or Windows Subsystem for Linux)
-1. clone this repository (at the desired tag or commit)
-1. run `make mobile-install` from the repository root. this installs the scripts to `/data/local/tmp` on the connected android device by default.
-   * if your pixel has Termux installed, you can install the scripts to the Termux home directory with `make mobile-install DEVICE_INSTALL_DIRECTORY=/data/data/com.termux/files/home`
-   * if you are running these steps on WSL, you should use the adb executable from windows (which has USB support) with `make mobile-install HOST_ADB_COMMAND=/mnt/c/Users/someone/AppData/Local/Android/Sdk/platform-tools/adb.exe`
+### 3. Per-File MediaScanner Broadcasts
+* **Problem:** Broadcasting directory-level media scans was silently ignored by Android's MediaStore.
+* **Solution:** Loop individual file scan broadcasts: `am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///storage/emulated/0/DCIM/Camera/filename"`.
 
-this is the preferred installation method for development as it doesn't require an internet connection & any changes to the scripts in the local repo are immediately deployed to the pixel
+### 4. Google Photos `has_upload_permanently_failed` DB Reset
+* **Problem:** When an upload failed once, Google Photos set `has_upload_permanently_failed = 1` in `gphotos0.db`, permanently ignoring the file on future runs.
+* **Solution:** Reset the flag before starting each chunk: `UPDATE local_media SET has_upload_permanently_failed = 0`.
 
-> [!NOTE]  
-> The directories `/data/local/tmp` & `/data/data/com.termux/files/home` are known to have less restrictive selinux policies, which allow files to be made executable. Installing the scripts to other directories may not work.
+### 5. Hardware Safety: Ugreen USB-C Dock, VBUS Bypass & Battery Saver
+* **Problem:** Lithium-ion battery swelling ("spicy pillow") from continuous 24/7 charging.
+* **Solution:** `BatteryLimiter.kt` toggles `/sys/class/power_supply/battery/charging_enabled` to cap charging at 80%. When connected to a Ugreen USB-C Power Delivery Dock, wall power continues powering the SoC, USB HDD, and Gigabit Ethernet via VBUS passthrough without stressing the battery.
 
+---
 
-## usage
+## 💎 Key System Features
 
-### setup
-1. start a shell on the device & navigate to the installation directory
-    * from the device
-      * launch [Terminal](https://android.googlesource.com/platform/packages/apps/Terminal/), [Termux](https://github.com/termux/termux-app), [JuiceSSH](https://play.google.com/store/apps/details?id=com.sonelli.juicessh), or some other terminal app
-      * run `su` then allow sudo access to your terminal app in Magisk
-    * from a PC
-      * run `adb shell`
-      * run `su` then allow sudo access to the shell process in Magisk
-1. run `cd` to navigate to the installation directory e.g. `cd ./pixel-backup-gang` or `cd /data/data/com.termux/files/home/pixel-backup-gang` or `cd /data/local/tmp/pixel-backup-gang`
-1. run `./start_global_shell.sh` to enter the global mount namespace
-    * the Magisk "force the global mount namespace" doesn't work - maybe it only works for magisk modules?
+### 1. Metadata Preservation Engine & Sidecar JSON
+Preserves both **in-file** (EXIF, GPS, Apple MakerNotes, ICC color profiles) and **out-of-file** (iCloud faces, albums, favorites, descriptions) metadata:
+* `metadata.py` exports iCloud DB fields into `.meta.json` sidecar files.
+* Uses `exiftool -TagsFromFile` to copy all tags to compressed files.
+* Enforces a mandatory **Metadata Verification Gate** comparing original vs. compressed tags before allowing any upload.
 
-### mounting
+### 2. Tiered Quality Compression Matrix (NAS as Vault)
+* **NAS = The Vault:** Stores untouched 4K originals permanently.
+* **iCloud = Access Copy:** Gradually scaled down as media ages:
+  * **0 – 6 Months:** Original (untouched).
+  * **6 – 12 Months:** High (1080p HEVC / 3024px photo).
+  * **1 – 2 Years:** Medium (720p HEVC / 2048px photo).
+  * **2+ Years:** Compact (480p HEVC / 1440px photo).
+* Re-compression **always reads from the NAS original** to eliminate compounding generational quality loss. Reclaims 50-75% iCloud space ($84+/year saved).
 
-#### ext4 drives (i prefer this because i have files larger than 4gb & ext4 is just [better than FAT32](https://en.wikipedia.org/wiki/Comparison_of_file_systems))
-1. connect the ext4 formatted external drive to the pixel. you should get an os notification that says the drive is not supported. clear or ignore this notification.
-   * this notification directs you to format the drive in FAT32 - don't do that
-1. find the block device that you want to mount. it is usually found at `/dev/block/sdg1` but changes when devices are connected and disconnected e.g. it might show up as `/dev/block/sdh1` when reconnected. run `ls -alh /dev/block/` to see what is in there.
-   * if you don't know the filesystem UUID, you can use `./show_devices.sh`. this is just a convenience script, you don't need to run this.
-   * if you know the filesystem UUID, you can use `./find_device.sh`. this is just a convenience script, you don't need to run this.
-1. run `./mount_ext4.sh <BLOCK_DEVICE>` e.g. `./mount_ext4.sh /dev/block/sdg1`
-> [!CAUTION]
-> the `mount_ext4.sh` script currently disables [selinux](https://en.wikipedia.org/wiki/Security-Enhanced_Linux) by running `setenforce 0`. you must not have any untrusted apps installed on your device. do not visit untrusted websites. to re-enable selinux, you can reboot your device, or run `setenforce 1` with root permissions.
->
-> want this fixed? see https://github.com/master-hax/pixel-backup-gang/issues/13 https://github.com/master-hax/pixel-backup-gang/blob/b25a5575fba3897cce126c15ed99245b1335f4c3/scripts/mount_ext4.sh#L41 
+### 3. 3-Gate Deletion Safety & 7-Day Quarantine
+No iCloud original is released until:
+1. ✅ **Gate 1:** NAS original SHA-256 hash verified.
+2. ✅ **Gate 2:** Google Photos upload verified via Pixel Ktor DB check.
+3. ✅ **Gate 3:** Compressed version uploaded to iCloud.
+4. ⏳ **Quarantine:** 7-day safety window expires.
 
-#### FAT32 drives (when you only have files < 4gb and/or don't want to disable selinux and/or are a Windows only user unwilling to install a tool like [Ext4Fsd](https://github.com/bobranten/Ext4Fsd.git) and/or are transferring directly from some kind of capture device)
-1. connect the FAT32 formatted external drive to the pixel. it should be working normally as removable storage i.e. readable & writable by apps with permission.
-1. find the name of folder that the drive is mounted to. it looks like `/mnt/media_rw/2IDK-11F4` - you can check the path displayed in any file explorer app.
-1. run `./remount_vfat.sh <MOUNTED_FOLDER>` e.g. `./remount_vfat.sh /mnt/media_rw/2IDK-11F4`
+### 4. Android App (`PixelBackupManager` v1.2)
+* **Ktor REST Server (Port 8080)**: Offers `/api/health`, `/api/stage`, `/api/verify`, `/api/photos/restart`, `/api/mount`, `/api/unmount`.
+* **Hardware Safety**: Battery limit (70-80%), battery bypass, CPU thermal pause (>45°C), screen-off wake lock (`keyevent 223`).
+- **UI**: Modern Jetpack Compose dark UI with live network, HDD mount, and system health badges.
 
-**everything located under `/the_binding` on the external drive should now be visible by apps at `/the_binding` in the internal storage** (the directories are automatically created if they don't already exist)
+### 5. Linux Media Orchestrator Web UI (`v2.2`)
+* **Dashboard (`http://localhost:8000`)**: Live Pixel health metrics, telemetrics & annual $ savings calculator, interactive settings form, 2FA prompt, single-file iCloud test downloader, and metadata diff comparison sandbox.
+* **24/7 Resilience**: `systemd` unit (`media-orchestrator.service`) with auto ADB port forwarding and dynamic Pixel IP auto-discovery.
 
-> [!NOTE]  
-> Google Photos will not instantly pick up the new media. It scans the filesystem to update their library when it wants to.
-> However, we send a media scan broadcast when the drive is mounted ([ext4](https://github.com/master-hax/pixel-backup-gang/blob/87a0fcc2d4481a54e5c8750bfbf2be8fcee0f50d/scripts/mount_ext4.sh#L52-L54),[VFAT](https://github.com/master-hax/pixel-backup-gang/blob/87a0fcc2d4481a54e5c8750bfbf2be8fcee0f50d/scripts/remount_vfat.sh#L60-L63))
-> this is reported to be reliable to get photos to do a scan, however you may need to force close then re-open Google Photos
+---
 
-### unmounting
+## 📂 Repository Structure
 
-1. make sure nothing important is reading from or writing to the drive
-2. run `./unmount.sh`
+```
+pixel-backup-gang/
+├── android-app/                   # PixelBackupManager Kotlin Android Studio Project
+│   ├── app/src/main/java/com/backupgang/manager/
+│   │   ├── MainActivity.kt        # Jetpack Compose UI & Web Connector Card
+│   │   ├── service/BackupService.kt # Ktor REST Server & Pipeline Executor
+│   │   └── util/                  # BatteryLimiter, MountHelper, BackupState
+│   └── build.gradle
+├── linux-orchestrator/            # FastAPI Linux Backend & Web UI Command Center
+│   ├── main.py                    # FastAPI entrypoint & REST endpoints
+│   ├── pipeline.py                # Inbox organizer, chunk pusher & tier scheduler
+│   ├── metadata.py                # Exiftool handler & metadata verification gate
+│   ├── compression.py             # Tiered ffmpeg/libvips compression engine
+│   ├── pixel_client.py            # HTTP client to Pixel Ktor API with ADB fallback
+│   ├── icloud_sync.py             # icloudpd download & pyicloud integration
+│   ├── database.py                # SQLite schema & settings management
+│   ├── media-orchestrator.service # Systemd unit file for 24/7 background operation
+│   └── static/index.html          # Obsidian glassmorphism Web UI dashboard
+└── apk/
+    └── PixelBackupManager-v1.2.apk # Pre-compiled ready-to-flash Android APK
+```
 
-**everything located under `/the_binding` in the internal storage should now be gone. you can disconnect the drive if you're sure all pending writes have been flushed.**
+---
 
-## notes
-* currently, the ext4 mounting script disables selinux security controls entirely, which is quite unsafe - do not have any kind of untrusted apps installed on your device while using this. selinux remains disabled until the next boot, or you can run the command `setenforce 1` to re-enable it earlier. don't forget that the software on the pixel is severely out of date and there are a lot of serious known vulnerabilities. try to keep device radios off (especially bluetooth and NFC) to reduce the attack surface.
-* this scripts in this repo should not make any changes to a pixel that persist past a reboot (besides the scripts themselves existing wherever you saved them)
-* my recommendation for regular usage is to find your drive's filesystem UUID using `./show_devices.sh` and store it. you can then use this UUID in a script to always re-mount that same drive without having to figure out what the block device path is at e.g. something like `./mount_ext4.sh $(./find_device.sh ./my_drive_id.txt)`
-* list of shell utilities available per android version: https://android.googlesource.com/platform/system/core/+/refs/heads/main/shell_and_utilities/#android-10-api-level-29_quince-tart
-* excellent reference: https://android.stackexchange.com/questions/214288/how-to-stop-apps-writing-to-android-folder-on-the-sd-card/257401
+## 🚀 Quick Start & Installation
+
+### 1. Install Android App on Pixel 1 OG
+Connect Pixel via USB / ADB:
+```bash
+adb install -r apk/PixelBackupManager-v1.2.apk
+adb shell am start -n com.backupgang.manager/.MainActivity
+```
+
+### 2. Setup Linux Orchestrator
+Install dependencies:
+```bash
+sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl ffmpeg libvips-tools
+pip install --break-system-packages fastapi uvicorn requests pyicloud icloudpd pillow pyexiftool
+```
+
+Run Orchestrator:
+```bash
+cd linux-orchestrator
+python3 -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
+Open **`http://localhost:8000`** in your browser.
+
+### 3. Install 24/7 Systemd Service
+```bash
+sudo cp linux-orchestrator/media-orchestrator.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now media-orchestrator
+```
+
+---
+
+## 📜 License
+MIT License © 2026. Built with passion for hardware longevity, data preservation, and cloud cost optimization.

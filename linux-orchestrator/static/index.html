@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Lifecycle Command Center</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0c0c0f;
+            --card-bg: rgba(255, 255, 255, 0.04);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --accent-cyan: #00f0ff;
+            --accent-blue: #0082ff;
+            --accent-green: #00ff88;
+            --accent-orange: #ff9f00;
+            --accent-red: #ff3b30;
+            --text-light: #f3f3f7;
+            --text-muted: rgba(255, 255, 255, 0.54);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-light); padding: 24px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .header h1 { font-size: 24px; font-weight: 700; color: var(--text-light); }
+        .header p { font-size: 13px; color: var(--text-muted); }
+        .badge { background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .card { background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(12px); border-radius: 16px; padding: 20px; }
+        .card h3 { font-size: 14px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 12px; }
+        .card .value { font-size: 32px; font-weight: 700; color: var(--accent-cyan); }
+        .card .subtext { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+        
+        .btn-group { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+        .btn { background: var(--card-bg); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s ease; }
+        .btn:hover { background: var(--accent-cyan); color: #000; }
+        .btn-orange { border-color: var(--accent-orange); color: var(--accent-orange); }
+        .btn-orange:hover { background: var(--accent-orange); color: #000; }
+        .btn-green { border-color: var(--accent-green); color: var(--accent-green); }
+        .btn-green:hover { background: var(--accent-green); color: #000; }
+        .btn-blue { border-color: var(--accent-blue); color: var(--accent-blue); }
+        .btn-blue:hover { background: var(--accent-blue); color: #000; }
+
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+        .form-group input, .form-group select { width: 100%; background: rgba(0,0,0,0.5); border: 1px solid var(--card-border); color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 13px; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+        th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--card-border); }
+        th { color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 11px; }
+        .log-container { background: #050507; border: 1px solid var(--card-border); border-radius: 12px; padding: 16px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
+        .log-entry { margin-bottom: 4px; }
+        .log-INFO { color: var(--text-light); }
+        .log-SUCCESS { color: var(--accent-green); }
+        .log-ERROR { color: var(--accent-red); }
+
+        .match-true { color: var(--accent-green); font-weight: bold; }
+        .match-false { color: var(--accent-red); font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>Media Lifecycle Command Center v2.2</h1>
+            <p>Linux Orchestrator ↔ Pixel 1 OG Google Photos & Tiered iCloud Sync</p>
+        </div>
+        <div class="badge" id="pixel-status-badge">PIXEL: CONNECTED</div>
+    </div>
+
+    <!-- System Complementarity Banner -->
+    <div class="card" style="margin-bottom: 24px; border-color: rgba(0, 240, 255, 0.3);">
+        <h3 style="color: var(--accent-cyan);">🤝 System Division of Labor & Connectivity</h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 13px; margin-top: 8px;">
+            <div style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; border: 1px solid var(--card-border);">
+                <b style="color: var(--accent-cyan); font-size: 14px;">🐧 Linux Orchestrator (The Brain)</b><br>
+                <span style="color: var(--text-muted); font-size: 12px;">Web Interface: <b>http://localhost:8000</b></span>
+                <ul style="margin-top: 6px; margin-left: 16px; color: var(--text-light); font-size: 12px; line-height: 1.6;">
+                    <li>Downloads new originals from iCloud via <code>icloudpd</code></li>
+                    <li>Organizes files into NAS Vault (<code>Sorted/YYYY/MM/DD</code>)</li>
+                    <li>Generates <code>.meta.json</code> sidecars (faces, albums, favorites)</li>
+                    <li>Runs age-based tiered compression (1080p/720p/480p)</li>
+                    <li>Enforces 3-Gate deletion verification & 7-day quarantine</li>
+                </ul>
+            </div>
+            <div style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; border: 1px solid var(--card-border);">
+                <b style="color: var(--accent-green); font-size: 14px;">📱 Pixel 1 OG App (Upload Engine)</b><br>
+                <span style="color: var(--text-muted); font-size: 12px;">Ktor REST API: <b id="pixel-ktor-url">http://192.168.1.198:8080</b></span>
+                <ul style="margin-top: 6px; margin-left: 16px; color: var(--text-light); font-size: 12px; line-height: 1.6;">
+                    <li>Hard-links 100-file chunks into <code>DCIM/Camera</code> staging</li>
+                    <li>Runs per-file MediaStore scan broadcasts</li>
+                    <li>Clears <code>has_upload_permanently_failed</code> in <code>gphotos0.db</code></li>
+                    <li>Triggers free unlimited original-quality Google Photos uploads</li>
+                    <li>Provides hardware thermal safety & battery bypass mode</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Telemetrics & Savings Banner -->
+    <div class="grid">
+        <div class="card">
+            <h3>Storage Saved</h3>
+            <div class="value" id="tele-saved-gb" style="color: var(--accent-green);">0 GB</div>
+            <div class="subtext" id="tele-saved-money">Est. $0.00 / yr saved</div>
+        </div>
+        <div class="card">
+            <h3>Google Photos Backed Up</h3>
+            <div class="value" id="stat-gphotos" style="color: var(--accent-cyan);">0</div>
+            <div class="subtext">Unlimited original quality via Pixel 1 hack</div>
+        </div>
+        <div class="card">
+            <h3>iCloud Tiered Re-uploaded</h3>
+            <div class="value" id="stat-icloud" style="color: var(--accent-blue);">0</div>
+            <div class="subtext">Replaced originals with age-compressed copies</div>
+        </div>
+        <div class="card">
+            <h3>Pixel Device Health</h3>
+            <div id="pixel-health-info" style="font-size: 13px; line-height: 1.6;">
+                Loading device metrics...
+            </div>
+        </div>
+    </div>
+
+    <div class="btn-group">
+        <button class="btn" onclick="triggerAction('/api/pipeline/trigger_icloud_download')">📥 Trigger iCloud Download</button>
+        <button class="btn btn-green" onclick="triggerAction('/api/pipeline/trigger_pixel_sync')">📱 Push Chunk to Pixel</button>
+        <button class="btn btn-orange" onclick="triggerAction('/api/pipeline/trigger_tier_review')">🗜️ Run Tier Compression Review</button>
+    </div>
+
+    <div class="grid">
+        <!-- Settings & iCloud Credentials Panel -->
+        <div class="card">
+            <h3>Folder Paths & iCloud Credentials</h3>
+            <form id="settings-form" onsubmit="saveSettings(event)">
+                <div class="form-group">
+                    <label>Source Inbox Path (iCloud Downloads)</label>
+                    <input type="text" id="cfg-nas_inbox_path" name="nas_inbox_path">
+                </div>
+                <div class="form-group">
+                    <label>Destination Sorted Root (NAS Vault)</label>
+                    <input type="text" id="cfg-nas_sorted_root" name="nas_sorted_root">
+                </div>
+                <div class="form-group">
+                    <label>Staging Path (USB ext4)</label>
+                    <input type="text" id="cfg-nas_staging_path" name="nas_staging_path">
+                </div>
+                <div class="form-group">
+                    <label>iCloud Username (Apple ID)</label>
+                    <input type="text" id="cfg-icloud_username" name="icloud_username">
+                </div>
+                <div class="form-group">
+                    <label>iCloud Password</label>
+                    <input type="password" id="cfg-icloud_password" name="icloud_password">
+                </div>
+                <div class="form-group">
+                    <label>Pixel IP Address</label>
+                    <input type="text" id="cfg-pixel_ip" name="pixel_ip">
+                </div>
+                <button type="submit" class="btn btn-green" style="width: 100%; margin-top: 8px;">💾 Save Settings</button>
+            </form>
+            <button class="btn btn-blue" style="width: 100%; margin-top: 8px;" onclick="authenticateICloud()">🔐 Authenticate iCloud Session</button>
+        </div>
+
+        <!-- 2FA & Single File Test Download Panel -->
+        <div class="card">
+            <h3>iCloud 2FA & Single File Test Tool</h3>
+            <div id="2fa-section" style="margin-bottom: 20px; display: none; background: rgba(255, 159, 0, 0.1); padding: 12px; border-radius: 8px; border: 1px solid var(--accent-orange);">
+                <h4 style="color: var(--accent-orange); font-size: 13px; margin-bottom: 8px;">Apple 2FA Authentication Required</h4>
+                <div class="form-group">
+                    <label>Enter 6-Digit Code sent to Apple Device</label>
+                    <input type="text" id="twofa-code" placeholder="123456">
+                </div>
+                <button class="btn btn-orange" onclick="submit2FA()">Submit 2FA Code</button>
+            </div>
+
+            <div class="form-group">
+                <label>Single File Download Test (Filename in iCloud)</label>
+                <input type="text" id="test-download-filename" placeholder="IMG_0001.JPG">
+            </div>
+            <button class="btn" onclick="testDownloadSingleFile()">📥 Test Download Single File</button>
+
+            <div id="download-test-result" style="margin-top: 12px; font-size: 12px; color: var(--text-muted);"></div>
+        </div>
+    </div>
+
+    <!-- Metadata Preservation Sandbox -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h3>Metadata Preservation & Compression Sandbox</h3>
+        <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+            <input type="text" id="test-filepath" placeholder="/path/to/test_image_or_video.jpg" style="flex: 1; background: rgba(0,0,0,0.5); border: 1px solid var(--card-border); color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 13px;">
+            <select id="test-tier" style="width: 150px; background: rgba(0,0,0,0.5); border: 1px solid var(--card-border); color: #fff; padding: 8px; border-radius: 8px; font-size: 13px;">
+                <option value="high">High (1080p / 3024px)</option>
+                <option value="medium">Medium (720p / 2048px)</option>
+                <option value="compact">Compact (480p / 1440px)</option>
+            </select>
+            <button class="btn btn-orange" onclick="runMetadataTest()">🔬 Test Compression & Compare Metadata</button>
+        </div>
+
+        <div id="metadata-test-results" style="display: none;">
+            <h4 id="diff-status-header" style="margin-bottom: 8px; font-size: 14px;"></h4>
+            <div style="max-height: 250px; overflow-y: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Metadata Tag</th>
+                            <th>Original Value</th>
+                            <th>Compressed Value</th>
+                            <th>Match</th>
+                        </tr>
+                    </thead>
+                    <tbody id="metadata-diff-table"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Live Pipeline Activity Log</h3>
+        <div class="log-container" id="log-container">
+            <div class="log-entry log-INFO">[INIT] Initializing Dashboard feed...</div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchDashboard() {
+            try {
+                const res = await fetch('/api/dashboard');
+                const data = await res.json();
+                
+                document.getElementById('stat-gphotos').innerText = data.summary.synced_gphotos;
+                document.getElementById('stat-icloud').innerText = data.summary.reuploaded_icloud;
+                
+                const ph = data.pixel_health;
+                if (ph.battery !== undefined) {
+                    document.getElementById('pixel-status-badge').innerText = `PIXEL: ONLINE (${ph.battery}%)`;
+                    document.getElementById('pixel-health-info').innerHTML = `
+                        <b>Battery:</b> ${ph.battery}% (${ph.charging ? 'Charging' : 'Bypass/Discharging'})<br>
+                        <b>CPU Temp:</b> ${ph.cpuTemp}°C<br>
+                        <b>USB Drive:</b> ${ph.isUsbMounted ? 'MOUNTED (RW)' : 'DISCONNECTED'}<br>
+                        <b>IP:</b> ${ph.ipAddress} (${ph.networkType})
+                    `;
+                    document.getElementById('pixel-ktor-url').innerText = `http://${ph.ipAddress}:8080`;
+                } else {
+                    document.getElementById('pixel-status-badge').innerText = 'PIXEL: UNREACHABLE';
+                    document.getElementById('pixel-status-badge').style.borderColor = 'var(--accent-red)';
+                }
+                
+                const logContainer = document.getElementById('log-container');
+                logContainer.innerHTML = data.recent_logs.map(l => 
+                    `<div class="log-entry log-${l.level}">[${l.timestamp}] ${l.message}</div>`
+                ).join('');
+                
+            } catch (e) {
+                console.error("Dashboard fetch error:", e);
+            }
+        }
+
+        async function fetchTelemetry() {
+            try {
+                const res = await fetch('/api/telemetry');
+                const data = await res.json();
+                document.getElementById('tele-saved-gb').innerText = `${data.saved_gb} GB Saved`;
+                document.getElementById('tele-saved-money').innerText = `Est. $${data.estimated_annual_savings_usd}/yr saved ($${data.estimated_monthly_savings_usd}/mo)`;
+            } catch (e) {
+                console.error("Telemetry error:", e);
+            }
+        }
+
+        async function fetchSettings() {
+            try {
+                const res = await fetch('/api/settings');
+                const data = await res.json();
+                for (const [k, v] of Object.entries(data)) {
+                    const el = document.getElementById(`cfg-${k}`);
+                    if (el) el.value = v;
+                }
+            } catch (e) {
+                console.error("Fetch settings error:", e);
+            }
+        }
+
+        async function saveSettings(e) {
+            e.preventDefault();
+            const form = document.getElementById('settings-form');
+            const formData = new FormData(form);
+            const obj = {};
+            formData.forEach((v, k) => obj[k] = v);
+            
+            await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(obj)
+            });
+            alert('Settings saved successfully!');
+            fetchDashboard();
+        }
+
+        async function authenticateICloud() {
+            const res = await fetch('/api/icloud/auth', { method: 'POST' });
+            const data = await res.json();
+            if (data.status === 'requires_2fa') {
+                document.getElementById('2fa-section').style.display = 'block';
+                alert(data.message);
+            } else {
+                alert(data.message);
+            }
+        }
+
+        async function submit2FA() {
+            const code = document.getElementById('twofa-code').value;
+            const res = await fetch('/api/icloud/2fa', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: code })
+            });
+            const data = await res.json();
+            alert(data.message);
+            if (data.status === 'success') {
+                document.getElementById('2fa-section').style.display = 'none';
+            }
+        }
+
+        async function testDownloadSingleFile() {
+            const filename = document.getElementById('test-download-filename').value;
+            if (!filename) return alert('Enter a filename');
+            document.getElementById('download-test-result').innerText = 'Downloading...';
+            const res = await fetch('/api/test/download_icloud_file', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: filename })
+            });
+            const data = await res.json();
+            document.getElementById('download-test-result').innerText = data.success ? `Success: Saved to ${data.filepath}` : `Failed: ${data.error || data.stdout}`;
+        }
+
+        async function runMetadataTest() {
+            const filepath = document.getElementById('test-filepath').value;
+            const tier = document.getElementById('test-tier').value;
+            if (!filepath) return alert('Enter a file path');
+
+            document.getElementById('metadata-test-results').style.display = 'none';
+            const res = await fetch('/api/test/metadata_compare', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filepath: filepath, target_tier: tier })
+            });
+            const data = await res.json();
+
+            if (data.status === 'error') {
+                return alert(`Test Error: ${data.message}`);
+            }
+
+            document.getElementById('metadata-test-results').style.display = 'block';
+            document.getElementById('diff-status-header').innerHTML = `
+                Verification Gate: ${data.verification_gate.passed ? '✅ PASSED' : '❌ FAILED'} | 
+                Original Size: ${(data.verification_gate.original_size / 1024 / 1024).toFixed(2)} MB | 
+                Compressed Size: ${(data.verification_gate.compressed_size / 1024 / 1024).toFixed(2)} MB (${(data.verification_gate.compression_ratio * 100).toFixed(1)}%)
+            `;
+
+            const tbody = document.getElementById('metadata-diff-table');
+            tbody.innerHTML = data.metadata_diff.tags.map(t => `
+                <tr>
+                    <td><b>${t.key}</b></td>
+                    <td>${t.original}</td>
+                    <td>${t.compressed}</td>
+                    <td class="match-${t.match}">${t.match ? 'MATCH' : 'DIFF'}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function triggerAction(endpoint) {
+            await fetch(endpoint, { method: 'POST' });
+            fetchDashboard();
+        }
+
+        fetchDashboard();
+        fetchTelemetry();
+        fetchSettings();
+        setInterval(fetchDashboard, 5000);
+        setInterval(fetchTelemetry, 15000);
+    </script>
+</body>
+</html>
