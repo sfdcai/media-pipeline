@@ -242,16 +242,16 @@ class BackupService : Service() {
                                 val filesArray = json.optJSONArray("files")
                                 var stagedCount = 0
                                 if (filesArray != null) {
-                                    val stageDir = File("/mnt/my_drive/_stage")
+                                    val stageDir = File("/mnt/my_drive/the_binding")
                                     if (!stageDir.exists()) {
                                         stageDir.mkdirs()
-                                        Shell.cmd("mkdir -p /mnt/my_drive/_stage").exec()
+                                        Shell.cmd("mkdir -p /mnt/my_drive/the_binding").exec()
                                     }
                                     for (i in 0 until filesArray.length()) {
                                         val filePath = filesArray.getString(i)
                                         val srcFile = File(filePath)
                                         val filename = srcFile.name
-                                        val targetPath = "/mnt/my_drive/_stage/$filename"
+                                        val targetPath = "/mnt/my_drive/the_binding/$filename"
                                         val targetFile = File(targetPath)
                                         if (targetFile.exists()) {
                                             targetFile.delete()

@@ -12,11 +12,16 @@ _icloud_service = None
 
 def get_pyicloud_session(username: str = "", password: str = "") -> PyiCloudService:
     global _icloud_service
-    if _icloud_service is None and username and password:
-        try:
-            _icloud_service = PyiCloudService(username, password)
-        except Exception as e:
-            logger.error(f"Error authenticating PyiCloudService: {e}")
+    if _icloud_service is None:
+        if not username or not password:
+            import database
+            username = database.get_setting("icloud_username")
+            password = database.get_setting("icloud_password")
+        if username and password:
+            try:
+                _icloud_service = PyiCloudService(username, password)
+            except Exception as e:
+                logger.error(f"Error authenticating PyiCloudService: {e}")
     return _icloud_service
 
 def submit_2fa_code(code: str) -> Dict[str, Any]:
@@ -39,55 +44,91 @@ def submit_2fa_code(code: str) -> Dict[str, Any]:
         return {"status": "info", "message": "2FA is not currently required."}
 
 def run_icloud_download(directory: str = ICLOUD_DOWNLOAD_DIR) -> Dict[str, Any]:
-    """Runs icloudpd command to pull new photos from iCloud."""
-    os.makedirs(directory, exist_ok=True)
-    cmd = [
-        "icloudpd",
-        "--directory", directory,
-        "--folder-structure", "{yyyy}/{mm}/{dd}",
-        "--set-mtime"
-    ]
-    logger.info(f"Triggering icloudpd download to {directory}...")
+    """Runs pyicloud to pull new photos from iCloud."""
+    logger.info(f"Triggering pyicloud download to {directory}...")
     try:
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=3600)
-        return {
-            "success": res.returncode == 0,
-            "stdout": res.stdout[-1000:],
-            "stderr": res.stderr[-1000:]
-        }
+        api = get_pyicloud_session()
+        if not api or api.requires_2fa:
+            logger.error("iCloud authentication failed or 2FA required.")
+            return {"success": False, "error": "Authentication failed or 2FA required"}
+            
+        os.makedirs(directory, exist_ok=True)
+        photos = api.photos.all
+        count = 0
+        for photo in photos:
+            target_file = os.path.join(directory, photo.filename)
+            if not os.path.exists(target_file):
+                logger.info(f"Downloading {photo.filename}...")
+                download = photo.download()
+                with open(target_file, 'wb') as f:
+                    f.write(download)
+                try:
+                    dt = photo.created
+                    mtime = dt.timestamp()
+                    os.utime(target_file, (mtime, mtime))
+                except Exception:
+                    pass
+                count += 1
+        return {"success": True, "stdout": f"Downloaded {count} files via pyicloud"}
     except Exception as e:
-        logger.error(f"icloudpd execution failed: {e}")
+        logger.error(f"pyicloud download failed: {e}")
         return {"success": False, "error": str(e)}
 
 def download_single_file_from_icloud(filename: str, target_dir: str = ICLOUD_DOWNLOAD_DIR) -> Dict[str, Any]:
     """Downloads a single photo/video by filename for testing."""
-    os.makedirs(target_dir, exist_ok=True)
-    cmd = [
-        "icloudpd",
-        "--directory", target_dir,
-        "--match-filename", filename,
-        "--set-mtime"
-    ]
     logger.info(f"Downloading single file '{filename}' from iCloud...")
     try:
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=300)
+        api = get_pyicloud_session()
+        if not api or api.requires_2fa:
+            return {"success": False, "error": "Authentication failed or 2FA required"}
+            
+        os.makedirs(target_dir, exist_ok=True)
+        photos = api.photos.all
+        matched_photo = None
+        for photo in photos:
+            if photo.filename == filename:
+                matched_photo = photo
+                break
+                
+        if not matched_photo:
+            return {"success": False, "error": f"File {filename} not found in iCloud"}
+            
         target_file = os.path.join(target_dir, filename)
-        exists = os.path.exists(target_file)
+        download = matched_photo.download()
+        with open(target_file, 'wb') as f:
+            f.write(download)
+        try:
+            dt = matched_photo.created
+            mtime = dt.timestamp()
+            os.utime(target_file, (mtime, mtime))
+        except Exception:
+            pass
+            
         return {
-            "success": res.returncode == 0 and exists,
-            "filepath": target_file if exists else "",
-            "stdout": res.stdout[-500:]
+            "success": True,
+            "filepath": target_file,
+            "stdout": f"Successfully downloaded {filename} via pyicloud"
         }
     except Exception as e:
         logger.error(f"Failed single file download: {e}")
         return {"success": False, "error": str(e)}
 
 def upload_compressed_to_icloud(file_path: str) -> bool:
-    """Uploads a compressed copy to iCloud using pyicloud / icloud CLI."""
+    """Uploads a compressed copy to iCloud using pyicloud."""
     try:
-        cmd = ["python3", "-m", "pyicloud", "--upload", file_path]
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=600)
-        return res.returncode == 0
+        api = get_pyicloud_session()
+        if not api or api.requires_2fa:
+            logger.error("iCloud authentication failed or 2FA required for upload.")
+            return False
+            
+        logger.info(f"Uploading {file_path} to iCloud via pyicloud...")
+        asset = api.photos.upload(file_path)
+        if asset:
+            logger.info(f"Successfully uploaded {file_path} to iCloud. Asset: {asset}")
+            return True
+        else:
+            logger.error(f"Upload returned None for {file_path}")
+            return False
     except Exception as e:
         logger.error(f"Error uploading to iCloud: {e}")
         return False

@@ -19,14 +19,14 @@ class UsbReceiver : BroadcastReceiver() {
             Toast.makeText(context, "USB Device Detected. Mounting...", Toast.LENGTH_SHORT).show()
             val success = MountHelper.mountDrive()
             if (success) {
-                Toast.makeText(context, "6TB HDD Mounted Successfully!", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "USB Drive Mounted Successfully!", Toast.LENGTH_LONG).show()
             } else {
-                Toast.makeText(context, "Failed to mount 6TB HDD. Ensure Magisk root is granted.", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Failed to mount USB Drive. Ensure Magisk root is granted.", Toast.LENGTH_LONG).show()
             }
         } else if (UsbManager.ACTION_USB_DEVICE_DETACHED == action) {
             Toast.makeText(context, "USB Device Detached. Unmounting...", Toast.LENGTH_SHORT).show()
             MountHelper.unmountDrive()
-            Toast.makeText(context, "6TB HDD Unmounted Cleanly.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "USB Drive Unmounted Cleanly.", Toast.LENGTH_LONG).show()
         }
     }
 }

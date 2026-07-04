@@ -12,7 +12,7 @@ object MountHelper {
     }
 
     private fun isDriveMountedInNamespace(inInitNamespace: Boolean): Boolean {
-        val cmdPrefix = if (inInitNamespace) "nsenter -t 1 -m -- " else ""
+        val cmdPrefix = if (inInitNamespace) "nsenter --mount=/proc/1/ns/mnt -- " else ""
         val result = Shell.cmd("${cmdPrefix}mount").exec()
         if (result.isSuccess) {
             for (line in result.out) {
@@ -30,7 +30,7 @@ object MountHelper {
 
     fun getStorageInfo(): Pair<Long, Long> {
         // Returns Pair(usedBytes, totalBytes)
-        val result = Shell.cmd("nsenter -t 1 -m -- df $HDD_PATH").exec()
+        val result = Shell.cmd("nsenter --mount=/proc/1/ns/mnt -- df $HDD_PATH").exec()
         if (result.isSuccess && result.out.size >= 2) {
             val parts = result.out[1].split("\\s+".toRegex())
             if (parts.size >= 4) {
@@ -58,7 +58,7 @@ object MountHelper {
     }
 
     fun detectUsbBlockDevice(): String {
-        val detectCmd = "part=\$(blkid | grep -i \"BACKUPUSB\" | cut -d: -f1 | head -n 1)\n" +
+        val detectCmd = "part=\$(/system/bin/blkid | grep -i \"BACKUPUSB\" | cut -d: -f1 | head -n 1)\n" +
             "if [ -n \"\$part\" ]; then\n" +
             "    echo \"\$part\"\n" +
             "    exit 0\n" +
@@ -68,15 +68,17 @@ object MountHelper {
             "        name=\$(basename \"\$dev\")\n" +
             "        best_part=\"\"\n" +
             "        max_size=0\n" +
-            "        for p_path in /dev/block/\${name}*; do\n" +
-            "            if echo \"\$p_path\" | grep -qE \"[0-9]+\$\"; then\n" +
-            "                line=\$(blkid \"\$p_path\" 2>/dev/null)\n" +
+            "        for p_dir in /sys/block/\$name/\${name}*; do\n" +
+            "            if [ -d \"\$p_dir\" ]; then\n" +
+            "                p_name=\$(basename \"\$p_dir\")\n" +
+            "                p_path=\"/dev/block/\$p_name\"\n" +
+            "                line=\$(/system/bin/blkid \"\$p_path\" 2>/dev/null)\n" +
             "                if [ -n \"\$line\" ]; then\n" +
             "                    if echo \"\$line\" | grep -qE 'TYPE=\"ext4\"|TYPE=\"f2fs\"'; then\n" +
             "                        echo \"\$p_path\"\n" +
             "                        exit 0\n" +
             "                    fi\n" +
-            "                    size=\$(cat /sys/class/block/\$(basename \"\$p_path\")/size 2>/dev/null || echo 0)\n" +
+            "                    size=\$(cat \"\$p_dir/size\" 2>/dev/null || echo 0)\n" +
             "                    if [ \"\$size\" -gt \"\$max_size\" ]; then\n" +
             "                        max_size=\$size\n" +
             "                        best_part=\"\$p_path\"\n" +
@@ -88,7 +90,7 @@ object MountHelper {
             "            echo \"\$best_part\"\n" +
             "            exit 0\n" +
             "        fi\n" +
-            "        raw_fs=\$(blkid /dev/block/\$name 2>/dev/null | grep -E \"/dev/block/\$name:\" | cut -d: -f1)\n" +
+            "        raw_fs=\$(/system/bin/blkid /dev/block/\$name 2>/dev/null | grep -E \"/dev/block/\$name:\" | cut -d: -f1)\n" +
             "        if [ -n \"\$raw_fs\" ]; then\n" +
             "            echo \"\$raw_fs\"\n" +
             "            exit 0\n" +
@@ -106,7 +108,7 @@ object MountHelper {
 
     fun detectFilesystemType(blockDev: String): String {
         if (blockDev.isEmpty()) return "auto"
-        val result = Shell.cmd("blkid $blockDev | grep -o 'TYPE=\"[^\"]*\"' | cut -d'\"' -f2").exec()
+        val result = Shell.cmd("/system/bin/blkid $blockDev | grep -o 'TYPE=\"[^\"]*\"' | cut -d'\"' -f2").exec()
         return if (result.isSuccess && result.out.isNotEmpty()) {
             result.out[0].trim()
         } else {
@@ -118,24 +120,30 @@ object MountHelper {
         val detectCmd = "for dev in /sys/block/sd*; do " +
             "if [ -L \"\$dev\" ] && readlink \"\$dev\" | grep -q \"usb\"; then " +
             "  name=\$(basename \"\$dev\"); " +
-            "  blkid /dev/block/\${name}* 2>/dev/null | grep -E \"/dev/block/\${name}[0-9]+:\" | while read -r line; do " +
-            "    path=\$(echo \"\$line\" | cut -d: -f1); " +
+            "  for p_dir in /sys/block/\$name/\${name}*; do " +
+            "    if [ -d \"\$p_dir\" ]; then " +
+            "      p_name=\$(basename \"\$p_dir\"); " +
+            "      path=\"/dev/block/\$p_name\"; " +
+            "      line=\$(/system/bin/blkid \"\$path\" 2>/dev/null); " +
+            "      if [ -n \"\$line\" ]; then " +
+            "        label=\$(echo \"\$line\" | grep -o \" LABEL=\\\"[^\\\"]*\\\"\" | cut -d\\\" -f2); " +
+            "        type=\$(echo \"\$line\" | grep -o \" TYPE=\\\"[^\\\"]*\\\"\" | cut -d\\\" -f2); " +
+            "        [ -z \"\$label\" ] && label=\"Unnamed\"; " +
+            "        [ -z \"\$type\" ] && type=\"unknown\"; " +
+            "        size_sectors=\$(cat \"\$p_dir/size\" 2>/dev/null || echo 0); " +
+            "        echo \"\$path|\$label|\$type|\$size_sectors\"; " +
+            "      fi; " +
+            "    fi; " +
+            "  done; " +
+            "  line=\$(/system/bin/blkid \"/dev/block/\$name\" 2>/dev/null); " +
+            "  if [ -n \"\$line\" ]; then " +
             "    label=\$(echo \"\$line\" | grep -o \" LABEL=\\\"[^\\\"]*\\\"\" | cut -d\\\" -f2); " +
             "    type=\$(echo \"\$line\" | grep -o \" TYPE=\\\"[^\\\"]*\\\"\" | cut -d\\\" -f2); " +
             "    [ -z \"\$label\" ] && label=\"Unnamed\"; " +
             "    [ -z \"\$type\" ] && type=\"unknown\"; " +
-            "    size_sectors=\$(cat /sys/class/block/\$(basename \"\$path\")/size 2>/dev/null || echo 0); " +
-            "    echo \"\$path|\$label|\$type|\$size_sectors\"; " +
-            "  done; " +
-            "  blkid /dev/block/\${name} 2>/dev/null | grep -E \"/dev/block/\${name}:\" | while read -r line; do " +
-            "    path=\$(echo \"\$line\" | cut -d: -f1); " +
-            "    label=\$(echo \"\$line\" | grep -o \" LABEL=\\\"[^\\\"]*\\\"\" | cut -d\\\" -f2); " +
-            "    type=\$(echo \"\$line\" | grep -o \" TYPE=\\\"[^\\\"]*\\\"\" | cut -d\\\" -f2); " +
-            "    [ -z \"\$label\" ] && label=\"Unnamed\"; " +
-            "    [ -z \"\$type\" ] && type=\"unknown\"; " +
-            "    size_sectors=\$(cat /sys/class/block/\$(basename \"\$path\")/size 2>/dev/null || echo 0); " +
-            "    echo \"\$path|\$label|\$type|\$size_sectors\"; " +
-            "  done; " +
+            "    size_sectors=\$(cat \"/sys/block/\$name/size\" 2>/dev/null || echo 0); " +
+            "    echo \"/dev/block/\$name|\$label|\$type|\$size_sectors\"; " +
+            "  fi; " +
             "fi; " +
             "done"
         val result = Shell.cmd(detectCmd).exec()
@@ -184,56 +192,56 @@ object MountHelper {
             "/mnt/my_drive"
         )
         for (point in mountPointsToUmount) {
-            commands.add("nsenter -t 1 -m -- umount -l $point 2>/dev/null || true")
+            commands.add("nsenter --mount=/proc/1/ns/mnt -- umount -l $point 2>/dev/null || true")
             commands.add("umount -l $point 2>/dev/null || true")
         }
 
-        commands.add("nsenter -t 1 -m -- mkdir -p /mnt/my_drive")
+        commands.add("nsenter --mount=/proc/1/ns/mnt -- mkdir -p /mnt/my_drive")
         commands.add("mkdir -p /mnt/my_drive")
 
         if (fstype == "ext4" || fstype == "f2fs") {
-            commands.add("nsenter -t 1 -m -- mount -t $fstype -o nosuid,nodev,noexec,noatime,rw $blockDev /mnt/my_drive")
+            commands.add("nsenter --mount=/proc/1/ns/mnt -- mount -t $fstype -o nosuid,nodev,noexec,noatime,rw $blockDev /mnt/my_drive")
             commands.add("mount -t $fstype -o nosuid,nodev,noexec,noatime,rw $blockDev /mnt/my_drive")
 
-            commands.add("nsenter -t 1 -m -- chown -R $appUsername:$appUsername /mnt/my_drive")
+            commands.add("nsenter --mount=/proc/1/ns/mnt -- chown -R $appUsername:$appUsername /mnt/my_drive")
             commands.add("chown -R $appUsername:$appUsername /mnt/my_drive")
 
-            commands.add("nsenter -t 1 -m -- chmod -R 777 /mnt/my_drive")
+            commands.add("nsenter --mount=/proc/1/ns/mnt -- chmod -R 777 /mnt/my_drive")
             commands.add("chmod -R 777 /mnt/my_drive")
         } else {
             // exfat, vfat, ntfs, etc. or auto
             val mountCmd = "mount -t $fstype -o nosuid,nodev,noexec,noatime,rw,uid=$uid,gid=$uid,fmask=0000,dmask=0000 $blockDev /mnt/my_drive || mount -o nosuid,nodev,noexec,noatime,rw $blockDev /mnt/my_drive"
-            commands.add("nsenter -t 1 -m -- $mountCmd")
+            commands.add("nsenter --mount=/proc/1/ns/mnt -- $mountCmd")
             commands.add(mountCmd)
 
-            commands.add("nsenter -t 1 -m -- chown -R $appUsername:$appUsername /mnt/my_drive 2>/dev/null || true")
+            commands.add("nsenter --mount=/proc/1/ns/mnt -- chown -R $appUsername:$appUsername /mnt/my_drive 2>/dev/null || true")
             commands.add("chown -R $appUsername:$appUsername /mnt/my_drive 2>/dev/null || true")
 
-            commands.add("nsenter -t 1 -m -- chmod -R 777 /mnt/my_drive 2>/dev/null || true")
+            commands.add("nsenter --mount=/proc/1/ns/mnt -- chmod -R 777 /mnt/my_drive 2>/dev/null || true")
             commands.add("chmod -R 777 /mnt/my_drive 2>/dev/null || true")
         }
 
-        commands.add("nsenter -t 1 -m -- mkdir -p /mnt/my_drive/the_binding")
+        commands.add("nsenter --mount=/proc/1/ns/mnt -- mkdir -p /mnt/my_drive/the_binding")
         commands.add("mkdir -p /mnt/my_drive/the_binding")
 
-        commands.add("nsenter -t 1 -m -- chown -R $appUsername:$appUsername /mnt/my_drive/the_binding 2>/dev/null || true")
+        commands.add("nsenter --mount=/proc/1/ns/mnt -- chown -R $appUsername:$appUsername /mnt/my_drive/the_binding 2>/dev/null || true")
         commands.add("chown -R $appUsername:$appUsername /mnt/my_drive/the_binding 2>/dev/null || true")
 
-        commands.add("nsenter -t 1 -m -- chmod -R 777 /mnt/my_drive/the_binding 2>/dev/null || true")
+        commands.add("nsenter --mount=/proc/1/ns/mnt -- chmod -R 777 /mnt/my_drive/the_binding 2>/dev/null || true")
         commands.add("chmod -R 777 /mnt/my_drive/the_binding 2>/dev/null || true")
         
         // Auto-create and prepare the Photographs sync directory
-        commands.add("nsenter -t 1 -m -- mkdir -p /mnt/my_drive/Backup/shares/Amit/Photographs")
+        commands.add("nsenter --mount=/proc/1/ns/mnt -- mkdir -p /mnt/my_drive/Backup/shares/Amit/Photographs")
         commands.add("mkdir -p /mnt/my_drive/Backup/shares/Amit/Photographs")
 
-        commands.add("nsenter -t 1 -m -- chown -R $appUsername:$appUsername /mnt/my_drive/Backup/shares/Amit/Photographs 2>/dev/null || true")
+        commands.add("nsenter --mount=/proc/1/ns/mnt -- chown -R $appUsername:$appUsername /mnt/my_drive/Backup/shares/Amit/Photographs 2>/dev/null || true")
         commands.add("chown -R $appUsername:$appUsername /mnt/my_drive/Backup/shares/Amit/Photographs 2>/dev/null || true")
 
-        commands.add("nsenter -t 1 -m -- chmod -R 777 /mnt/my_drive/Backup/shares/Amit/Photographs 2>/dev/null || true")
+        commands.add("nsenter --mount=/proc/1/ns/mnt -- chmod -R 777 /mnt/my_drive/Backup/shares/Amit/Photographs 2>/dev/null || true")
         commands.add("chmod -R 777 /mnt/my_drive/Backup/shares/Amit/Photographs 2>/dev/null || true")
 
         // Bridges
-        commands.add("nsenter -t 1 -m -- mkdir -p /storage/emulated/0/DCIM/Camera")
+        commands.add("nsenter --mount=/proc/1/ns/mnt -- mkdir -p /storage/emulated/0/DCIM/Camera")
         commands.add("mkdir -p /storage/emulated/0/DCIM/Camera")
 
         val binds = listOf(
@@ -245,10 +253,10 @@ object MountHelper {
         )
         for (bind in binds) {
             val bindCmd = "mount -t sdcardfs -o nosuid,nodev,noexec,noatime,gid=9997 /mnt/my_drive/the_binding $bind"
-            commands.add("nsenter -t 1 -m -- $bindCmd")
+            commands.add("nsenter --mount=/proc/1/ns/mnt -- $bindCmd")
             commands.add(bindCmd)
         }
-        commands.add("nsenter -t 1 -m -- setenforce 0")
+        commands.add("nsenter --mount=/proc/1/ns/mnt -- setenforce 0")
         commands.add("setenforce 0")
 
         val result = Shell.cmd(*commands.toTypedArray()).exec()
@@ -262,9 +270,9 @@ object MountHelper {
         
         val unmountCmd = "for i in {1..10}; do\n" +
             "    # Try unmounting from init namespace\n" +
-            "    if nsenter -t 1 -m -- mount | grep -q \"my_drive\"; then\n" +
-            "        for target in \$(nsenter -t 1 -m -- mount | grep \"my_drive\" | awk '{print \$3}' | sort -u); do\n" +
-            "            nsenter -t 1 -m -- umount -l \"\$target\" 2>/dev/null || true\n" +
+            "    if nsenter --mount=/proc/1/ns/mnt -- mount | grep -q \"my_drive\"; then\n" +
+            "        for target in \$(nsenter --mount=/proc/1/ns/mnt -- mount | grep \"my_drive\" | awk '{print \$3}' | sort -u); do\n" +
+            "            nsenter --mount=/proc/1/ns/mnt -- umount -l \"\$target\" 2>/dev/null || true\n" +
             "        done\n" +
             "    fi\n" +
             "    # Try unmounting from local namespace\n" +
@@ -274,7 +282,7 @@ object MountHelper {
             "        done\n" +
             "    fi\n" +
             "    # Check if cleared in both\n" +
-            "    if ! nsenter -t 1 -m -- mount | grep -q \"my_drive\" && ! mount | grep -q \"my_drive\"; then\n" +
+            "    if ! nsenter --mount=/proc/1/ns/mnt -- mount | grep -q \"my_drive\" && ! mount | grep -q \"my_drive\"; then\n" +
             "        break\n" +
             "    fi\n" +
             "    sleep 0.1\n" +

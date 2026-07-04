@@ -109,6 +109,29 @@ def sync_pending_files_to_pixel(batch_size: int = 100):
     nas_paths = [r["nas_path"] for r in rows]
     filenames = [r["original_filename"] for r in rows]
     
+    # Check if files exist on Pixel, and push them if missing
+    import subprocess
+    pixel_client.ensure_adb_forward_and_connection()
+    for nas_path in nas_paths:
+        exists_on_pixel = False
+        try:
+            res = subprocess.run(
+                ["adb", "shell", "su", "-c", f"test -f \"{nas_path}\" && echo OK"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5
+            )
+            if "OK" in res.stdout:
+                exists_on_pixel = True
+        except Exception:
+            pass
+            
+        if not exists_on_pixel:
+            database.log_event("INFO", f"Pushing {os.path.basename(nas_path)} to Pixel via ADB.")
+            success = pixel_client.push_file(nas_path, nas_path)
+            if not success:
+                database.log_event("ERROR", f"Failed to push {os.path.basename(nas_path)} to Pixel.")
+                conn.close()
+                return
+
     database.log_event("INFO", f"Sending chunk of {len(nas_paths)} files to Pixel for Google Photos staging.")
     
     # Call Pixel stage API
@@ -203,7 +226,7 @@ def run_3gate_deletion_check():
     conn.commit()
     conn.close()
 
-async def pipeline_loop():
+def pipeline_loop():
     database.init_db()
     database.log_event("INFO", "Media Pipeline Orchestrator Started.")
     
@@ -215,4 +238,4 @@ async def pipeline_loop():
             run_3gate_deletion_check()
         except Exception as e:
             logger.error(f"Error in pipeline loop: {e}")
-        await asyncio.sleep(30)
+        time.sleep(30)

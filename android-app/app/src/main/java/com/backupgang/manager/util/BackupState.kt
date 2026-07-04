@@ -164,10 +164,22 @@ object BackupState {
 
     fun setAvailableDevices(devices: List<UsbDeviceOption>, context: Context) {
         _availableDevices.value = devices
-        if (_selectedDevicePath.value.isEmpty() && devices.isNotEmpty()) {
-            val best = devices.firstOrNull { it.label.equals("BACKUPUSB", ignoreCase = true) }
-                ?: devices.firstOrNull { it.type.equals("ext4", ignoreCase = true) || it.type.equals("f2fs", ignoreCase = true) }
-                ?: devices.maxByOrNull { it.sizeBytes }
+        if (devices.isEmpty()) return
+
+        // 1. Check if "BACKUPUSB" is connected. If yes, always prioritize it.
+        val backupUsb = devices.firstOrNull { it.label.equals("BACKUPUSB", ignoreCase = true) }
+        if (backupUsb != null) {
+            if (_selectedDevicePath.value != backupUsb.path) {
+                setSelectedDevicePath(context, backupUsb.path)
+            }
+            return
+        }
+
+        // 2. If current selection is empty, not in the available devices list, or is raw/read-only (like iso9660)
+        val current = devices.firstOrNull { it.path == _selectedDevicePath.value }
+        if (current == null || current.type.equals("iso9660", ignoreCase = true) || _selectedDevicePath.value.isEmpty()) {
+            val best = devices.firstOrNull { it.type.equals("ext4", ignoreCase = true) || it.type.equals("f2fs", ignoreCase = true) }
+                ?: devices.filter { !it.type.equals("iso9660", ignoreCase = true) }.maxByOrNull { it.sizeBytes }
                 ?: devices.first()
             setSelectedDevicePath(context, best.path)
         }

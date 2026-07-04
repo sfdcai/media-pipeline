@@ -153,3 +153,22 @@ def unmount_drive() -> bool:
         except Exception:
             continue
     return False
+
+def push_file(local_path: str, remote_path: str) -> bool:
+    """Pushes a file from the server to the Pixel's storage via ADB."""
+    ensure_adb_forward_and_connection()
+    remote_dir = os.path.dirname(remote_path)
+    try:
+        # Create directory structure as root
+        subprocess.run(["adb", "shell", "su", "-c", f"mkdir -p \"{remote_dir}\""], check=True, timeout=15)
+        # Push to public temp directory
+        temp_path = f"/data/local/tmp/{os.path.basename(local_path)}"
+        subprocess.run(["adb", "push", local_path, temp_path], check=True, timeout=120)
+        # Move to destination directory as root
+        subprocess.run(["adb", "shell", "su", "-c", f"mv \"{temp_path}\" \"{remote_path}\""], check=True, timeout=15)
+        # Set permissions
+        subprocess.run(["adb", "shell", "su", "-c", f"chmod 777 \"{remote_path}\""], check=True, timeout=15)
+        return True
+    except Exception as e:
+        logger.error(f"Failed to push file {local_path} to Pixel: {e}")
+        return False

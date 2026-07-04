@@ -49,7 +49,8 @@ class MetadataTestModel(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     database.init_db()
-    asyncio.create_task(pipeline.pipeline_loop())
+    import threading
+    threading.Thread(target=pipeline.pipeline_loop, daemon=True).start()
 
 @app.get("/")
 async def read_index():
